@@ -1,3 +1,6 @@
+I started the development of this module with Manus IA, but i can't do this thing work with my app. 
+If you know a way to make this module works, please tell me (or open a PR)! (:
+
 # expo-salesforce-miaw
 
 Este módulo fornece uma integração nativa para o SDK de [Salesforce Messaging In-App and Web (MIAW)](https://developer.salesforce.com/docs/service/messaging-in-app/guide/overview.html) para aplicativos React Native, com suporte completo para Expo (SDK 53+).
