@@ -12,14 +12,11 @@ Pod::Spec.new do |s|
   s.homepage       = package['homepage']
   s.platform       = :ios, '15.1'
   s.swift_version  = '5.4'
-  s.source         = { git: 'https://github.com/yourusername/expo-salesforce-miaw' }
+  s.source         = { git: 'https://github.com/Salesforce-Async-Messaging/Swift-Package-InAppMessaging' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
-  
-  # Usando uma versão flexível (qualquer versão 246 ou superior, mas abaixo de 247)
-  # Ou simplesmente remova a versão para pegar a mais recente disponível no Specs Repo
-  s.dependency 'Messaging-InApp-UI'
+  s.dependency 'Messaging-InApp-UI', '~> 1.9.0'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
