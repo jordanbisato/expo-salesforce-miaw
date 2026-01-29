@@ -148,6 +148,7 @@ public class ExpoSalesforceMIAWModule: Module {
       config.preChatFields = hiddenFields
       self.uiConfiguration = config
       
+      // Esta implementação é um placeholder para a lógica de campos.
       return true
     }
     
