@@ -1,35 +1,38 @@
-I started the development of this module with Manus IA, but i can't do this thing work with my app. 
-If you know a way to make this module works, please tell me (or open a PR)! (:
+
+I started the development of this module with Manus IA, but i can't do this thing work with my app. If you know a way to make this module works, please tell me (or open a PR)! (:
 
 # expo-salesforce-miaw
 
-Este módulo fornece uma integração nativa para o SDK de [Salesforce Messaging In-App and Web (MIAW)](https://developer.salesforce.com/docs/service/messaging-in-app/guide/overview.html) para aplicativos React Native, com suporte completo para Expo (SDK 53+).
+This module provides a native integration for the Salesforce Messaging In-App and Web (MIAW) SDK for React Native applications, with full support for Expo (SDK 53+). [Salesforce Messaging In-App and Web (MIAW)](https://developer.salesforce.com/docs/service/messaging-in-app/guide/overview.html)
 
-Ele permite que você adicione facilmente a funcionalidade de chat do Salesforce em seu aplicativo, aproveitando os SDKs nativos para iOS e Android para obter o melhor desempenho e experiência do usuário.
+It allows you to easily add Salesforce chat functionality to your app, leveraging native iOS and Android SDKs for the best performance and user experience.
 
-## Funcionalidades
+(Features)
+**Native Bridge**: Direct communication with native Salesforce MIAW SDKs.
+
+**Expo Support**: Automatic configuration via Expo Config Plugin.
+
+**Unified Interface**: Simple and consistent JavaScript API for both platforms.
 
 - **Bridge Nativo**: Comunicação direta com os SDKs nativos do Salesforce MIAW.
-- **Suporte a Expo**: Configuração automática via Expo Config Plugin.
-- **Interface Unificada**: API JavaScript simples e consistente para ambas as plataformas.
-- **Gerenciamento de Sessão**: Controle sobre o `conversationId` para persistência de chat.
-- **Customização**: Suporte para campos de pré-chat ocultos.
+**Session Management**: Control over the conversationId for chat persistence.
 
-## Instalação
+**Customization**: Support for hidden pre-chat fields.
 
-Para instalar o módulo, execute o seguinte comando no seu projeto React Native ou Expo:
+##Installation
+
+To install the module, run the following command in your React Native or Expo project:
 
 ```bash
 npm install ./path/to/expo-salesforce-miaw
-# ou
+# or
 yarn add ./path/to/expo-salesforce-miaw
 ```
 
-## Configuração
+##Configuration
 
-### 1. Adicionar o Plugin ao `app.json`
-
-Adicione o plugin à sua configuração `app.json` ou `app.config.js`. O nome do plugin é o mesmo do pacote:
+Add Plugin to `app.json`
+Add the plugin to your app.json or app.config.js configuration. The plugin name is the same as the package name:
 
 ```json
 {
@@ -38,19 +41,18 @@ Adicione o plugin à sua configuração `app.json` ou `app.config.js`. O nome do
   }
 }
 ```
+The plugin will automatically configure the necessary permissions in `Info.plist` (iOS) and `build.gradle` settings (Android).
 
-O plugin irá configurar automaticamente as permissões necessárias no `Info.plist` (iOS) e as configurações do `build.gradle` (Android).
+### 2. Add Salesforce Config File
+Download the `config.json` file from your Salesforce admin dashboard and add it to your project.
 
-### 2. Adicionar o Arquivo de Configuração do Salesforce
+**For iOS**: Add the file to your project in Xcode.
 
-Baixe o arquivo `config.json` do seu painel de administração do Salesforce e adicione-o ao seu projeto.
+**For Android**: Place the file in the `android/app/src/main/assets` directory.
 
-- **Para iOS**: Adicione o arquivo ao seu projeto no Xcode.
-- **Para Android**: Coloque o arquivo no diretório `android/app/src/main/assets`.
+### 3. App Rebuild
 
-### 3. Rebuild do Aplicativo
-
-Após a instalação e configuração, você precisa reconstruir seu aplicativo para que as alterações nativas sejam aplicadas:
+After installation and configuration, you need to rebuild your application for the native changes to be applied:
 
 ```bash
 npx expo prebuild --clean
@@ -60,9 +62,8 @@ npx expo run:android
 
 ## API
 
-### `configure(config)`
-
-Configura o SDK manualmente. Retorna uma `Promise<boolean>`.
+### configure(config)
+Configures the SDK manually. Returns a `Promise<boolean>`.
 
 ```javascript
 import { configure } from 'expo-salesforce-miaw';
@@ -80,14 +81,13 @@ configure(config).then(success => {
 });
 ```
 
-### `configureFromFile(fileName)`
-
-Configura o SDK usando o arquivo `config.json`. Retorna uma `Promise<boolean>`.
+### configureFromFile(fileName)
+Configures the SDK using the `config.json` file. Returns a `Promise<boolean>`.
 
 ```javascript
 import { configureFromFile } from 'expo-salesforce-miaw';
 
-// O arquivo deve ser 'config.json' em assets (Android) ou no bundle (iOS)
+// The file must be 'config.json' in assets (Android) or in the bundle (iOS)
 configureFromFile('config').then(success => {
   if (success) {
     console.log('Salesforce MIAW configured successfully from file!');
@@ -95,9 +95,8 @@ configureFromFile('config').then(success => {
 });
 ```
 
-### `openChat()`
-
-Abre a interface de chat. Retorna uma `Promise<boolean>`.
+### openChat()
+Opens the chat interface. Returns a `Promise<boolean>`.
 
 ```javascript
 import { openChat } from 'expo-salesforce-miaw';
@@ -105,9 +104,8 @@ import { openChat } from 'expo-salesforce-miaw';
 openChat();
 ```
 
-### `closeChat()`
-
-Fecha a interface de chat. Retorna uma `Promise<boolean>`.
+### closeChat()
+Closes the chat interface. Returns a Promise<boolean>.
 
 ```javascript
 import { closeChat } from 'expo-salesforce-miaw';
@@ -115,9 +113,8 @@ import { closeChat } from 'expo-salesforce-miaw';
 closeChat();
 ```
 
-### `getConversationId()`
-
-Retorna o ID da conversa atual. Retorna uma `Promise<string | null>`.
+### getConversationId()
+Returns the current conversation ID. Returns a Promise<string | null>.
 
 ```javascript
 import { getConversationId } from 'expo-salesforce-miaw';
@@ -127,9 +124,8 @@ getConversationId().then(id => {
 });
 ```
 
-### `setConversationId(newId)`
-
-Define um novo ID de conversa. Retorna uma `Promise<boolean>`.
+### setConversationId(newId)
+Sets a new conversation ID. Returns a Promise<boolean>.
 
 ```javascript
 import { setConversationId } from 'expo-salesforce-miaw';
@@ -137,9 +133,8 @@ import { setConversationId } from 'expo-salesforce-miaw';
 setConversationId('new-custom-conversation-id');
 ```
 
-### `clearConversationId()`
-
-Limpa o ID da conversa atual e gera um novo. Retorna uma `Promise<string>` com o novo ID.
+### clearConversationId()
+Clears the current conversation ID and generates a new one. Returns a Promise<string> with the new ID.
 
 ```javascript
 import { clearConversationId } from 'expo-salesforce-miaw';
@@ -149,9 +144,8 @@ clearConversationId().then(newId => {
 });
 ```
 
-### `setHiddenPreChatFields(fields)`
-
-Define campos de pré-chat ocultos. Retorna uma `Promise<boolean>`.
+### setHiddenPreChatFields(fields)
+Sets hidden pre-chat fields. Returns a Promise<boolean>.
 
 ```javascript
 import { setHiddenPreChatFields } from 'expo-salesforce-miaw';
@@ -161,32 +155,25 @@ const fields = {
   LastName: 'Doe',
   Email: 'john.doe@example.com'
 };
-
-setHiddenPreChatFields(fields);
 ```
 
-### `registerPushToken(token)`
+### setHiddenPreChatFields(fields);
 
-Registra o token de notificação push. Retorna uma `Promise<boolean>`.
+###registerPushToken(token)
+Registers the push notification token. Returns a Promise<boolean>.
 
 ```javascript
 import { registerPushToken } from 'expo-salesforce-miaw';
 
-// Obtenha o token do serviço de notificação (ex: Expo Notifications)
+// Obtain the token from the notification service (e.g., Expo Notifications)
 const token = 'your-push-notification-token';
 registerPushToken(token);
 ```
-
-## Exemplo de Uso
-
-Crie um projeto de exemplo na pasta `example` para demonstrar o uso do módulo.
 
 ```bash
 cd example
 npm install
 npm start
 ```
-
-## Licença
-
+Licença (License)
 MIT
