@@ -14,19 +14,19 @@ import org.json.JSONObject
 import java.io.InputStream
 import java.util.UUID
 
-class ExpoSalesforceMIAWModule : Module() {
+class ExpoSalesForceMIAWModule : Module() {
   private var uiConfiguration: UIConfiguration? = null
   private var uiClient: UIClient? = null
   private var conversationId: String? = null
   private val prefs: SharedPreferences by lazy {
-    context.getSharedPreferences("ExpoSalesforceMIAW", Context.MODE_PRIVATE)
+    context.getSharedPreferences("ExpoSalesForceMIAW", Context.MODE_PRIVATE)
   }
 
   private val context: Context
     get() = appContext.reactContext ?: throw IllegalStateException("React context is null")
 
   override fun definition() = ModuleDefinition {
-    Name("ExpoSalesforceMIAW")
+    Name("ExpoSalesForceMIAW")
 
     // Configurar o SDK com as credenciais do Salesforce
     Function("configure") { config: Map<String, Any?> ->
@@ -34,25 +34,39 @@ class ExpoSalesforceMIAWModule : Module() {
         val url = config["url"] as? String ?: return@Function false
         val orgId = config["orgId"] as? String ?: return@Function false
         val developerName = config["developerName"] as? String ?: return@Function false
-        
+        val hFields = config["hiddenFields"] as Map<String, String> ?: null;
+
         // Obter ou criar conversation ID
         val convId = config["conversationId"] as? String ?: getOrCreateConversationId()
         conversationId = convId
-        
+
+        val hiddenFields = null;
+
+        if (hFields != null) {
+          hiddenFields = hFields.map { (key, value) ->
+            PreChatField(
+              label = key,
+              value = value,
+              isHidden = true
+            )
+          }
+        }
+
         // Criar configuração core
         val coreConfig = CoreConfiguration.create(
           url = url,
           organizationId = orgId,
           developerName = developerName,
-          conversationId = convId
+          conversationId = convId,
+          preChatFields = hiddenFields
         )
-        
+
         // Criar configuração UI
         uiConfiguration = UIConfiguration.create(coreConfig)
-        
+
         // Criar UIClient
         uiClient = UIClient.createClient(context, uiConfiguration!!)
-        
+
         true
       } catch (e: Exception) {
         e.printStackTrace()
@@ -66,14 +80,14 @@ class ExpoSalesforceMIAWModule : Module() {
         val inputStream: InputStream = context.assets.open("$fileName.json")
         val json = inputStream.bufferedReader().use { it.readText() }
         val jsonObject = JSONObject(json)
-        
+
         val url = jsonObject.getString("url")
         val orgId = jsonObject.getString("orgId")
         val developerName = jsonObject.getString("developerName")
-        
+
         val convId = getOrCreateConversationId()
         conversationId = convId
-        
+
         // Criar configuração core
         val coreConfig = CoreConfiguration.create(
           url = url,
@@ -81,13 +95,13 @@ class ExpoSalesforceMIAWModule : Module() {
           developerName = developerName,
           conversationId = convId
         )
-        
+
         // Criar configuração UI
         uiConfiguration = UIConfiguration.create(coreConfig)
-        
+
         // Criar UIClient
         uiClient = UIClient.createClient(context, uiConfiguration!!)
-        
+
         true
       } catch (e: Exception) {
         e.printStackTrace()
@@ -102,12 +116,12 @@ class ExpoSalesforceMIAWModule : Module() {
           promise.reject("ERR_NOT_CONFIGURED", "SDK not configured. Call configure() first.", null)
           return@AsyncFunction
         }
-        
+
         val activity = appContext.currentActivity as? AppCompatActivity ?: run {
           promise.reject("ERR_NO_ACTIVITY", "Could not find current activity.", null)
           return@AsyncFunction
         }
-        
+
         activity.runOnUiThread {
           try {
             client.openConversation(activity)
@@ -128,7 +142,7 @@ class ExpoSalesforceMIAWModule : Module() {
           promise.reject("ERR_NO_ACTIVITY", "Could not find current activity.", null)
           return@AsyncFunction
         }
-        
+
         activity.runOnUiThread {
           try {
             // O chat é fechado automaticamente quando o usuário fecha a tela
@@ -152,7 +166,7 @@ class ExpoSalesforceMIAWModule : Module() {
       try {
         conversationId = newId
         prefs.edit().putString("conversationId", newId).apply()
-        
+
         // Reconfigurar se já existir uma configuração
         uiConfiguration?.let { config ->
           val coreConfig = CoreConfiguration.create(
@@ -161,7 +175,7 @@ class ExpoSalesforceMIAWModule : Module() {
             developerName = config.coreConfiguration.developerName,
             conversationId = newId
           )
-          
+
           uiConfiguration = UIConfiguration.create(coreConfig)
           uiClient = UIClient.createClient(context, uiConfiguration!!)
           true
@@ -177,7 +191,7 @@ class ExpoSalesforceMIAWModule : Module() {
       val newId = UUID.randomUUID().toString()
       conversationId = newId
       prefs.edit().putString("conversationId", newId).apply()
-      
+
       // Reconfigurar se já existir uma configuração
       uiConfiguration?.let { config ->
         val coreConfig = CoreConfiguration.create(
@@ -186,11 +200,11 @@ class ExpoSalesforceMIAWModule : Module() {
           developerName = config.coreConfiguration.developerName,
           conversationId = newId
         )
-        
+
         uiConfiguration = UIConfiguration.create(coreConfig)
         uiClient = UIClient.createClient(context, uiConfiguration!!)
       }
-      
+
       newId
     }
 
@@ -198,7 +212,7 @@ class ExpoSalesforceMIAWModule : Module() {
     Function("setHiddenPreChatFields") { fields: Map<String, String> ->
       try {
         val config = uiConfiguration ?: return@Function false
-        
+
         val hiddenFields = fields.map { (key, value) ->
           PreChatField(
             label = key,
@@ -206,7 +220,7 @@ class ExpoSalesforceMIAWModule : Module() {
             isHidden = true
           )
         }
-        
+
         // Atualizar configuração com campos de pré-chat
         val coreConfig = config.coreConfiguration
         val newCoreConfig = CoreConfiguration.create(
@@ -216,10 +230,10 @@ class ExpoSalesforceMIAWModule : Module() {
           conversationId = coreConfig.conversationId,
           preChatFields = hiddenFields
         )
-        
+
         uiConfiguration = UIConfiguration.create(newCoreConfig)
         uiClient = UIClient.createClient(context, uiConfiguration!!)
-        
+
         true
       } catch (e: Exception) {
         e.printStackTrace()
@@ -247,7 +261,7 @@ class ExpoSalesforceMIAWModule : Module() {
     if (existingId != null) {
       return existingId
     }
-    
+
     val newId = UUID.randomUUID().toString()
     prefs.edit().putString("conversationId", newId).apply()
     return newId

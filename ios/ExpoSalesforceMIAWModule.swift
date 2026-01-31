@@ -3,42 +3,57 @@ import SMIClientCore
 import SMIClientUI
 import UIKit
 
-public class ExpoSalesforceMIAWModule: Module {
+public class SalesForceMIAWModule: Module {
+  // Propriedades de instância devem estar dentro da classe
+  private var conversationId: UUID?
   private var uiConfiguration: UIConfiguration?
-  private var conversationId: String?
-  
+  private var preChatFields: [PreChatField] = []
+
   public func definition() -> ModuleDefinition {
-    Name("ExpoSalesforceMIAW")
+    Name("ExpoSalesForceMIAW")
+
+    OnCreate {
+      self.conversationId = nil
+      self.uiConfiguration = nil
+    }
     
-    // Configurar o SDK com as credenciais do Salesforce
     Function("configure") { (config: [String: Any]) -> Bool in
-      guard let url = config["url"] as? String,
+      guard let urlString = config["url"] as? String,
             let orgId = config["orgId"] as? String,
             let developerName = config["developerName"] as? String else {
         return false
       }
       
-      // Obter ou criar conversation ID
-      let convId = config["conversationId"] as? String ?? self.getOrCreateConversationId()
+      let convId: UUID
+      if let conversationIdString = config["conversationId"] as? String,
+         let uuid = UUID(uuidString: conversationIdString) {
+        convId = uuid
+      } else {
+        convId = self.getOrCreateConversationId()
+      }
       self.conversationId = convId
-      
-      // Criar configuração
-      self.uiConfiguration = UIConfiguration(
-        url: URL(string: url)!,
+        
+    let configObj = UIConfiguration(
+        serviceAPI: URL(string: urlString)!,
         organizationId: orgId,
         developerName: developerName,
         conversationId: convId
       )
+    
+      // Se vierem campos no JSON, nós os processamos e guardamos
+        if let fieldsJson = config["preChatFields"] as? [String: String] {
+            self.preChatData = fieldsJson
+        }
+      
       
       return true
     }
     
-    // Configurar usando arquivo config.json
     Function("configureFromFile") { (fileName: String) -> Bool in
       guard let path = Bundle.main.path(forResource: fileName, ofType: "json"),
             let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let url = json["url"] as? String,
+            let urlString = json["url"] as? String,
             let orgId = json["orgId"] as? String,
             let developerName = json["developerName"] as? String else {
         return false
@@ -48,7 +63,7 @@ public class ExpoSalesforceMIAWModule: Module {
       self.conversationId = convId
       
       self.uiConfiguration = UIConfiguration(
-        url: URL(string: url)!,
+        serviceAPI: URL(string: urlString)!,
         organizationId: orgId,
         developerName: developerName,
         conversationId: convId
@@ -57,7 +72,6 @@ public class ExpoSalesforceMIAWModule: Module {
       return true
     }
     
-    // Abrir a interface de chat
     AsyncFunction("openChat") { (promise: Promise) in
       DispatchQueue.main.async {
         guard let config = self.uiConfiguration else {
@@ -70,15 +84,31 @@ public class ExpoSalesforceMIAWModule: Module {
           return
         }
         
-        // Criar e apresentar o view controller do chat
-        let chatViewController = ModalInterfaceViewController(configuration: config)
-        rootViewController.present(chatViewController, animated: true) {
-          promise.resolve(true)
-        }
+          // 1. Criamos o contexto da conversa
+          // No SDK 1.9.0+, campos ocultos são passados via ConversationContext
+          let context = ConversationContext()
+          
+          for (key, value) in self.preChatData {
+              // Adiciona cada campo como um dado customizado no contexto
+              context.customAttributes[key] = value
+          }
+          
+          // 2. Criamos o controlador com a configuração e o contexto
+          // O ModalInterfaceViewController aceita a config.
+          // Para injetar o contexto/campos, usamos o CoreClient antes do Push/Present
+          let coreClient = CoreFactory.create(withConfig: config)
+          
+          // No MIAW iOS, setAttributes ou setConversationContext são os nomes comuns
+          // Se coreClient.setPreChat falhou, usamos a injeção via cliente core:
+          coreClient.setConversationContext(context)
+          
+          let chatViewController = ModalInterfaceViewController(config)
+          rootViewController.present(chatViewController, animated: true) {
+            promise.resolve(true)
+          }
       }
     }
     
-    // Fechar a interface de chat
     AsyncFunction("closeChat") { (promise: Promise) in
       DispatchQueue.main.async {
         guard let rootViewController = self.getRootViewController() else {
@@ -92,93 +122,69 @@ public class ExpoSalesforceMIAWModule: Module {
       }
     }
     
-    // Obter o conversation ID atual
     Function("getConversationId") { () -> String? in
-      return self.conversationId
+      return self.conversationId?.uuidString
     }
     
-    // Definir um novo conversation ID
-    Function("setConversationId") { (newId: String) -> Bool in
+    Function("setConversationId") { (newIdString: String) -> Bool in
+      guard let newId = UUID(uuidString: newIdString) else {
+        return false
+      }
       self.conversationId = newId
       
-      // Reconfigurar se já existir uma configuração
       if let config = self.uiConfiguration {
         self.uiConfiguration = UIConfiguration(
-          url: config.url,
+          serviceAPI: config.serviceAPI,
           organizationId: config.organizationId,
           developerName: config.developerName,
           conversationId: newId
         )
         return true
       }
-      
       return false
     }
     
-    // Limpar o conversation ID (criar novo)
     Function("clearConversationId") { () -> String in
-      let newId = UUID().uuidString
+      let newId = UUID()
       self.conversationId = newId
-      UserDefaults.standard.set(newId, forKey: "ExpoSalesforceMIAW_ConversationId")
+      UserDefaults.standard.set(newId.uuidString, forKey: "ExpoSalesforceMIAW_ConversationId")
       
-      // Reconfigurar se já existir uma configuração
       if let config = self.uiConfiguration {
         self.uiConfiguration = UIConfiguration(
-          url: config.url,
+          serviceAPI: config.serviceAPI,
           organizationId: config.organizationId,
           developerName: config.developerName,
           conversationId: newId
         )
       }
-      
-      return newId
+      return newId.uuidString
     }
     
-    // Adicionar campos de pré-chat ocultos
-    Function("setHiddenPreChatFields") { (fields: [String: String]) -> Bool in
-      guard var config = self.uiConfiguration else {
-        return false
+      Function("setHiddenPreChatFields") { (fields: [String: String]) -> Bool in
+        self.preChatData = fields
+        return true
       }
-      
-      var hiddenFields: [PreChatField] = []
-      for (key, value) in fields {
-        hiddenFields.append(PreChatField(label: key, value: value, isHidden: true))
-      }
-      
-      config.preChatFields = hiddenFields
-      self.uiConfiguration = config
-      
-      // Esta implementação é um placeholder para a lógica de campos.
-      return true
-    }
     
-    // Registrar token de push notification
     Function("registerPushToken") { (token: String) -> Bool in
-      // Converter string do token para Data
-      let tokenData = token.data(using: .utf8) ?? Data()
-      
-      // Registrar com o SDK (se disponível na versão do SDK)
-      // NotificationManager.shared.registerDeviceToken(tokenData)
-      
       return true
     }
     
-    // Eventos
     Events("onChatOpened", "onChatClosed", "onMessageReceived", "onError")
   }
-  
-  // MARK: - Helper Methods
-  
-  private func getOrCreateConversationId() -> String {
-    if let existingId = UserDefaults.standard.string(forKey: "ExpoSalesforceMIAW_ConversationId") {
-      return existingId
+
+  // MARK: - Helper Methods (Agora dentro da classe)
+
+  private func getOrCreateConversationId() -> UUID {
+    let key = "ExpoSalesforceMIAW_ConversationId"
+    if let existingIdString = UserDefaults.standard.string(forKey: key),
+       let existingUUID = UUID(uuidString: existingIdString) {
+      return existingUUID
     }
-    
-    let newId = UUID().uuidString
-    UserDefaults.standard.set(newId, forKey: "ExpoSalesforceMIAW_ConversationId")
-    return newId
+    let newUUID = UUID()
+    UserDefaults.standard.set(newUUID.uuidString, forKey: key)
+    return newUUID
   }
-  
+
   private func getRootViewController() -> UIViewController? {
     guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
           let window = windowScene.windows.first,
@@ -190,7 +196,20 @@ public class ExpoSalesforceMIAWModule: Module {
     while let presentedViewController = topController.presentedViewController {
       topController = presentedViewController
     }
-    
     return topController
   }
+    
+    private func buildPreChatFields(from dict: [String: String]) -> [any PreChatField] {
+        var fields: [any PreChatField] = []
+        
+        for (key, value) in dict {
+          // CORREÇÃO: O SDK espera que você use o factory do SMIClientCore
+          // para criar campos, ou use o inicializador público se disponível.
+          // Caso HiddenPreChatField continue falhando, usamos esta abordagem:
+          let field = PreChatFactory.createHiddenField(name: key, value: value)
+          fields.append(field)
+        }
+        
+        return fields
+      }
 }

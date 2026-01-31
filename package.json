@@ -1,41 +1,43 @@
 {
   "name": "expo-salesforce-miaw",
-  "version": "1.1.0",
-  "description": "React Native module for Salesforce Messaging In-App and Web (MIAW) SDK integration with Expo support",
+  "version": "0.1.0",
+  "description": "My new module",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "prepare": "npm run build"
+    "build": "expo-module build",
+    "clean": "expo-module clean",
+    "lint": "expo-module lint",
+    "test": "expo-module test",
+    "prepare": "expo-module prepare",
+    "prepublishOnly": "expo-module prepublishOnly",
+    "expo-module": "expo-module",
+    "open:ios": "xed example/ios",
+    "open:android": "open -a \"Android Studio\" example/android"
   },
   "keywords": [
     "react-native",
     "expo",
-    "salesforce",
-    "miaw",
-    "messaging",
-    "in-app-chat",
-    "ios",
-    "android"
+    "expo-salesforce-miaw",
+    "ExpoSalesForceMIAW"
   ],
-  "author": "Jórdan Luiz Bisato",
+  "repository": "https://github.com/jordanbisato/expo-salesforce-miaw",
+  "bugs": {
+    "url": "https://github.com/jordanbisato/expo-salesforce-miaw/issues"
+  },
+  "author": "Jórdan Luiz Bisato <jordanbisato@hotmail.com> (jordanbisato)",
   "license": "MIT",
-  "homepage": "https://github.com/jordanbisato/expo-salesforce-miaw",
+  "homepage": "https://github.com/jordanbisato/expo-salesforce-miaw#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "expo-module-scripts": "^5.0.8",
+    "expo": "^54.0.27",
+    "react-native": "0.81.5"
+  },
   "peerDependencies": {
-    "expo": ">=53.0.0",
+    "expo": "*",
     "react": "*",
     "react-native": "*"
-  },
-  "devDependencies": {
-    "@types/react": "~18.3.12",
-    "@types/react-native": "~0.75.0",
-    "expo": "~53.0.0",
-    "react": "18.3.1",
-    "react-native": "0.75.0",
-    "typescript": "^5.3.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jordanbisato/expo-salesforce-miaw.git"
   }
 }
