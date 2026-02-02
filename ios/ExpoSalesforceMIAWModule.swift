@@ -11,10 +11,6 @@ public class SalesForceMIAWModule: Module {
   private var preChatData: [String: String] = [:]
   private var hiddenPreChatData: [String: String] = [:]
 
-  var preChatFieldValueProvider: (([PreChatField]) async throws -> [PreChatField])
-  public init(_ config: UIConfiguration,
-            preChatFieldValueProvider: ((_ preChatFields: [PreChatField]) async throws -> [PreChatField])? = nil)
-
   public func definition() -> ModuleDefinition {
     Name("ExpoSalesForceMIAW")
 
@@ -31,6 +27,7 @@ public class SalesForceMIAWModule: Module {
             let developerName = config["developerName"] as? String else {
         return false
       }
+      print("configure config:", config)
       
       let convId: UUID
       if let conversationIdString = config["conversationId"] as? String,
@@ -50,7 +47,7 @@ public class SalesForceMIAWModule: Module {
       
       // Processar campos de pré-chat se fornecidos no configure
       if let preChatFields = config["preChatFields"] as? [String: String] {
-          print("configure preChatFields: ", preChatFields)
+        print("configure preChatFields: ", preChatFields)
         self.preChatData = preChatFields
       }
       
@@ -58,15 +55,6 @@ public class SalesForceMIAWModule: Module {
         print("configure hiddenFields: ", hiddenFields)
         self.hiddenPreChatData = hiddenFields
       }
-        
-      // Create an instance of the hidden pre-chat delegate
-      let myPreChatDelegate = HiddenPrechatDelegateImplementation()
-
-      // Create a core client from a config
-      let coreClient = CoreFactory.create(withConfig: self.uiConfiguration)
-
-      // Assign the hidden pre-chat delegate
-      coreClient.preChatDelegate = myPreChatDelegate
       
       return true
     }
@@ -93,21 +81,49 @@ public class SalesForceMIAWModule: Module {
           return
         }
         
-        // Criar o CoreClient para registrar os provedores de campos
-        let coreClient = CoreFactory.create(withConfig: config)
+        // ============================================
+        // IMPLEMENTAÇÃO CORRETA BASEADA NO SDK
+        // ============================================
         
-        // Registrar provedor para campos de pré-chat (visíveis)
-        if !self.preChatData.isEmpty {
-          coreClient.setPreChatDelegate(delegate: self, queue: DispatchQueue.main)
+        // O SDK usa o Interface com inicializador que aceita preChatFieldValueProvider
+        // Passar closures diretamente para o construtor
+        
+        let chatView: ModalInterfaceViewController
+        
+        // Se temos campos de pré-chat visíveis OU ocultos, precisamos configurar
+        if !self.preChatData.isEmpty || !self.hiddenPreChatData.isEmpty {
+          
+          // Criar CoreClient para configurar delegates
+          let coreClient = CoreFactory.create(withConfig: config)
+          
+          // 1. Configurar HiddenPreChatDelegate se necessário
+          if !self.hiddenPreChatData.isEmpty {
+            let hiddenDelegate = HiddenPreChatDelegateImpl(hiddenData: self.hiddenPreChatData)
+            coreClient.preChatDelegate = hiddenDelegate
+            print("✅ HiddenPreChatDelegate configurado com \(self.hiddenPreChatData.count) campos")
+          }
+          
+          // 2. Criar o chat view com provider de campos visíveis
+          if !self.preChatData.isEmpty {
+            // O provider é uma closure que modifica os campos
+            chatView = ModalInterfaceViewController(
+              config,
+              preChatFieldValueProvider: { [weak self] preChatFields in
+                guard let self = self else { return preChatFields }
+                return try await self.modifyPreChatFields(preChatFields)
+              }
+            )
+            print("✅ PreChatFieldValueProvider configurado com \(self.preChatData.count) campos")
+          } else {
+            chatView = ModalInterfaceViewController(config)
+          }
+        } else {
+          // Sem campos de pré-chat
+          chatView = ModalInterfaceViewController(config)
         }
         
-        // Registrar provedor para campos ocultos
-        if !self.hiddenPreChatData.isEmpty {
-          coreClient.setHiddenPreChatDelegate(delegate: self, queue: DispatchQueue.main)
-        }
-        
-        let chatViewController = ModalInterfaceViewController(config)
-        rootViewController.present(chatViewController, animated: true) {
+        // Apresentar o chat
+        rootViewController.present(chatView, animated: true) {
           promise.resolve(true)
         }
       }
@@ -198,45 +214,77 @@ public class SalesForceMIAWModule: Module {
     }
     return topController
   }
+  
+  // ============================================
+  // MODIFICADOR DE PRÉ-CHAT FIELDS (VISÍVEIS)
+  // ============================================
+  
+  /// Função que modifica os campos de pré-chat com os valores fornecidos
+  private func modifyPreChatFields(_ preChatFields: [PreChatField]) async throws -> [PreChatField] {
+    print("🔵 modifyPreChatFields chamado com \(preChatFields.count) campos")
     
-   // Create a function to modify the pre-chat fields
-   private func setPreChatValues(prechatKeyValuePairs: [String: String]) -> (([PreChatField]) async throws -> [PreChatField]) { { prechatFields in
-            prechatFields.enumerated().forEach { (index, value) in
-                let currenPrechatName = value.name
-                print("setPreChatValues prechatField: ", value)
-
-                for prechatKeyValuePair in prechatKeyValuePairs {
-                    print("setPreChatValues prechatKeyValuePair: ", prechatKeyValuePair)
-                    if currenPrechatName == prechatKeyValuePair.key {
-                        prechatFields[index].value = prechatKeyValuePair.value
-                        prechatFields[index].isEditable = false
-                    }
-                }
-            }
-       
-            return prechatFields
-        }
-    }
+    var modifiedFields = preChatFields
     
-    private class HiddenPrechatDelegateImplementation: HiddenPreChatDelegate {
-
-      func core(_ core: CoreClient!,
-                conversation: Conversation!,
-                didRequestPrechatValues hiddenPreChatFields: [HiddenPreChatField]!,
-                completionHandler: HiddenPreChatValueCompletion!) {
-
-        // Use the conversation object to inspect info about the conversation
-          
-        var updatedFields = hiddenPreChatFields
-        for (index, field) in updatedFields.enumerated() {
-          if let value = self.hiddenPreChatData[field.name] {
-              updatedFields[index].value = value
-              updatedFields[index].isHidden = true
-          }
-        }
-
-        // Pass pre-chat fields back to SDK
-        completionHandler(updatedFields)
+    for (index, field) in modifiedFields.enumerated() {
+      let fieldName = field.name
+      print("  → Campo: \(fieldName)")
+      
+      // Se temos um valor para este campo, popula e configura
+      if let value = preChatData[fieldName] {
+        modifiedFields[index].value = value
+        
+        // IMPORTANTE: Configurar se o campo é editável ou não
+        // true = usuário pode editar o valor preenchido
+        // false = campo fica bloqueado (read-only)
+        modifiedFields[index].isEditable = false
+        
+        print("    ✅ Preenchido com: \(value) | isEditable: false")
       }
     }
+    
+    return modifiedFields
+  }
+  
+  // ============================================
+  // DELEGATE PARA HIDDEN PRE-CHAT FIELDS
+  // ============================================
+  
+  /// Delegate para campos OCULTOS (Hidden PreChat Fields)
+  /// Estes campos NÃO aparecem na interface, são enviados nos bastidores
+  private class HiddenPreChatDelegateImpl: HiddenPreChatDelegate {
+    private let hiddenData: [String: String]
+    
+    init(hiddenData: [String: String]) {
+      self.hiddenData = hiddenData
+    }
+    
+    func core(_ core: CoreClient!,
+              conversation: Conversation!,
+              didRequestPrechatValues hiddenPreChatFields: [HiddenPreChatField]!,
+              completionHandler: HiddenPreChatValueCompletion!) {
+      
+      print("🟣 didRequestPrechatValues (hidden) chamado")
+      
+      guard var updatedFields = hiddenPreChatFields else {
+        print("  ⚠️ Nenhum campo hidden recebido")
+        // Retornar array vazio ao invés de dicionário
+        completionHandler([])
+        return
+      }
+      
+      // Preencher cada campo hidden com o valor correspondente
+      for (index, field) in updatedFields.enumerated() {
+        let fieldName = field.name
+        print("  → Campo hidden: \(fieldName)")
+        
+        if let value = hiddenData[fieldName] {
+          updatedFields[index].value = value
+          print("    ✅ Preenchido com: \(value)")
+        }
+      }
+      
+      // Retornar os campos atualizados para o SDK
+      completionHandler(updatedFields)
+    }
+  }
 }
