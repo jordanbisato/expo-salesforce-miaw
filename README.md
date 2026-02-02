@@ -1,4 +1,3 @@
-
 I started the development of this module with Manus IA, but i can't do this thing work with my app. If you know a way to make this module works, please tell me (or open a PR)! (:
 
 # expo-salesforce-miaw
@@ -14,7 +13,6 @@ It allows you to easily add Salesforce chat functionality to your app, leveragin
 
 **Unified Interface**: Simple and consistent JavaScript API for both platforms.
 
-- **Bridge Nativo**: Comunicação direta com os SDKs nativos do Salesforce MIAW.
 **Session Management**: Control over the conversationId for chat persistence.
 
 **Customization**: Support for hidden pre-chat fields.
@@ -41,9 +39,11 @@ Add the plugin to your app.json or app.config.js configuration. The plugin name 
   }
 }
 ```
+
 The plugin will automatically configure the necessary permissions in `Info.plist` (iOS) and `build.gradle` settings (Android).
 
 ### 2. Add Salesforce Config File
+
 Download the `config.json` file from your Salesforce admin dashboard and add it to your project.
 
 **For iOS**: Add the file to your project in Xcode.
@@ -63,110 +63,144 @@ npx expo run:android
 ## API
 
 ### configure(config)
+
 Configures the SDK manually. Returns a `Promise<boolean>`.
 
 ```javascript
-import { configure } from 'expo-salesforce-miaw';
+import { configure } from "expo-salesforce-miaw";
 
 const config = {
-  url: 'YOUR_SALESFORCE_URL',
-  orgId: 'YOUR_ORG_ID',
-  developerName: 'YOUR_DEPLOYMENT_NAME',
+  url: "YOUR_SALESFORCE_URL",
+  orgId: "YOUR_ORG_ID",
+  developerName: "YOUR_DEPLOYMENT_NAME",
+  //Optional:
+  preChatFields: {
+    FirstName: "Test",
+    LastName: "User",
+  },
+  //Optional:
+  hiddenPreChatFields: {
+    Segment: "VIP",
+  },
 };
 
-configure(config).then(success => {
+configure(config).then((success) => {
   if (success) {
-    console.log('Salesforce MIAW configured successfully!');
+    console.log("Salesforce MIAW configured successfully!");
   }
 });
 ```
 
 ### configureFromFile(fileName)
+
 Configures the SDK using the `config.json` file. Returns a `Promise<boolean>`.
 
 ```javascript
-import { configureFromFile } from 'expo-salesforce-miaw';
+import { configureFromFile } from "expo-salesforce-miaw";
 
 // The file must be 'config.json' in assets (Android) or in the bundle (iOS)
-configureFromFile('config').then(success => {
+configureFromFile("config").then((success) => {
   if (success) {
-    console.log('Salesforce MIAW configured successfully from file!');
+    console.log("Salesforce MIAW configured successfully from file!");
   }
 });
 ```
 
 ### openChat()
+
 Opens the chat interface. Returns a `Promise<boolean>`.
 
 ```javascript
-import { openChat } from 'expo-salesforce-miaw';
+import { openChat } from "expo-salesforce-miaw";
 
 openChat();
 ```
 
 ### closeChat()
+
 Closes the chat interface. Returns a Promise<boolean>.
 
 ```javascript
-import { closeChat } from 'expo-salesforce-miaw';
+import { closeChat } from "expo-salesforce-miaw";
 
 closeChat();
 ```
 
 ### getConversationId()
+
 Returns the current conversation ID. Returns a Promise<string | null>.
 
 ```javascript
-import { getConversationId } from 'expo-salesforce-miaw';
+import { getConversationId } from "expo-salesforce-miaw";
 
-getConversationId().then(id => {
-  console.log('Current conversation ID:', id);
+getConversationId().then((id) => {
+  console.log("Current conversation ID:", id);
 });
 ```
 
 ### setConversationId(newId)
+
 Sets a new conversation ID. Returns a Promise<boolean>.
 
 ```javascript
-import { setConversationId } from 'expo-salesforce-miaw';
+import { setConversationId } from "expo-salesforce-miaw";
 
-setConversationId('new-custom-conversation-id');
+setConversationId("new-custom-conversation-id");
 ```
 
 ### clearConversationId()
+
 Clears the current conversation ID and generates a new one. Returns a Promise<string> with the new ID.
 
 ```javascript
-import { clearConversationId } from 'expo-salesforce-miaw';
+import { clearConversationId } from "expo-salesforce-miaw";
 
-clearConversationId().then(newId => {
-  console.log('New conversation ID:', newId);
+clearConversationId().then((newId) => {
+  console.log("New conversation ID:", newId);
 });
 ```
 
-### setHiddenPreChatFields(fields)
+### setPreChatFields(fields)
+
 Sets hidden pre-chat fields. Returns a Promise<boolean>.
 
 ```javascript
-import { setHiddenPreChatFields } from 'expo-salesforce-miaw';
+import { setPreChatFields } from "expo-salesforce-miaw";
 
 const fields = {
-  FirstName: 'John',
-  LastName: 'Doe',
-  Email: 'john.doe@example.com'
+  FirstName: "Test",
+  LastName: "User",
+  Email: "test.user@example.com",
 };
+
+setPreChatFields(fields);
 ```
 
-### setHiddenPreChatFields(fields);
+### setHiddenPreChatFields(fields)
 
-###registerPushToken(token)
+Sets hidden pre-chat fields. Returns a Promise<boolean>.
+
+```javascript
+import { setHiddenPreChatFields } from "expo-salesforce-miaw";
+
+const fields = {
+  FirstName: "Test",
+  LastName: "User",
+  Email: "test.user@example.com",
+};
+
+setHiddenPreChatFields(fields);
+```
+
+### registerPushToken(token)
+
 Registers the push notification token. Returns a Promise<boolean>.
 
 ```javascript
-import { registerPushToken } from 'expo-salesforce-miaw';
+import { registerPushToken } from "expo-salesforce-miaw";
 
 // Obtain the token from the notification service (e.g., Expo Notifications)
-const token = 'your-push-notification-token';
+const token = "your-push-notification-token";
 registerPushToken(token);
 ```
 
@@ -175,5 +209,6 @@ cd example
 npm install
 npm start
 ```
+
 Licença (License)
 MIT

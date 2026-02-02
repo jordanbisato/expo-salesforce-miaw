@@ -4,10 +4,16 @@ import SMIClientUI
 import UIKit
 
 public class SalesForceMIAWModule: Module {
-  // Propriedades de instância devem estar dentro da classe
   private var conversationId: UUID?
   private var uiConfiguration: UIConfiguration?
-  private var preChatFields: [PreChatField] = []
+  
+  // Armazenamento para campos de pré-chat
+  private var preChatData: [String: String] = [:]
+  private var hiddenPreChatData: [String: String] = [:]
+
+  var preChatFieldValueProvider: (([PreChatField]) async throws -> [PreChatField])
+  public init(_ config: UIConfiguration,
+            preChatFieldValueProvider: ((_ preChatFields: [PreChatField]) async throws -> [PreChatField])? = nil)
 
   public func definition() -> ModuleDefinition {
     Name("ExpoSalesForceMIAW")
@@ -15,6 +21,8 @@ public class SalesForceMIAWModule: Module {
     OnCreate {
       self.conversationId = nil
       self.uiConfiguration = nil
+      self.preChatData = [:]
+      self.hiddenPreChatData = [:]
     }
     
     Function("configure") { (config: [String: Any]) -> Bool in
@@ -33,35 +41,6 @@ public class SalesForceMIAWModule: Module {
       }
       self.conversationId = convId
         
-    let configObj = UIConfiguration(
-        serviceAPI: URL(string: urlString)!,
-        organizationId: orgId,
-        developerName: developerName,
-        conversationId: convId
-      )
-    
-      // Se vierem campos no JSON, nós os processamos e guardamos
-        if let fieldsJson = config["preChatFields"] as? [String: String] {
-            self.preChatData = fieldsJson
-        }
-      
-      
-      return true
-    }
-    
-    Function("configureFromFile") { (fileName: String) -> Bool in
-      guard let path = Bundle.main.path(forResource: fileName, ofType: "json"),
-            let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let urlString = json["url"] as? String,
-            let orgId = json["orgId"] as? String,
-            let developerName = json["developerName"] as? String else {
-        return false
-      }
-      
-      let convId = self.getOrCreateConversationId()
-      self.conversationId = convId
-      
       self.uiConfiguration = UIConfiguration(
         serviceAPI: URL(string: urlString)!,
         organizationId: orgId,
@@ -69,6 +48,36 @@ public class SalesForceMIAWModule: Module {
         conversationId: convId
       )
       
+      // Processar campos de pré-chat se fornecidos no configure
+      if let preChatFields = config["preChatFields"] as? [String: String] {
+          print("configure preChatFields: ", preChatFields)
+        self.preChatData = preChatFields
+      }
+      
+      if let hiddenFields = config["hiddenPreChatFields"] as? [String: String] {
+        print("configure hiddenFields: ", hiddenFields)
+        self.hiddenPreChatData = hiddenFields
+      }
+        
+      // Create an instance of the hidden pre-chat delegate
+      let myPreChatDelegate = HiddenPrechatDelegateImplementation()
+
+      // Create a core client from a config
+      let coreClient = CoreFactory.create(withConfig: self.uiConfiguration)
+
+      // Assign the hidden pre-chat delegate
+      coreClient.preChatDelegate = myPreChatDelegate
+      
+      return true
+    }
+    
+    Function("setPreChatFields") { (fields: [String: String]) -> Bool in
+      self.preChatData = fields
+      return true
+    }
+    
+    Function("setHiddenPreChatFields") { (fields: [String: String]) -> Bool in
+      self.hiddenPreChatData = fields
       return true
     }
     
@@ -84,28 +93,23 @@ public class SalesForceMIAWModule: Module {
           return
         }
         
-          // 1. Criamos o contexto da conversa
-          // No SDK 1.9.0+, campos ocultos são passados via ConversationContext
-          let context = ConversationContext()
-          
-          for (key, value) in self.preChatData {
-              // Adiciona cada campo como um dado customizado no contexto
-              context.customAttributes[key] = value
-          }
-          
-          // 2. Criamos o controlador com a configuração e o contexto
-          // O ModalInterfaceViewController aceita a config.
-          // Para injetar o contexto/campos, usamos o CoreClient antes do Push/Present
-          let coreClient = CoreFactory.create(withConfig: config)
-          
-          // No MIAW iOS, setAttributes ou setConversationContext são os nomes comuns
-          // Se coreClient.setPreChat falhou, usamos a injeção via cliente core:
-          coreClient.setConversationContext(context)
-          
-          let chatViewController = ModalInterfaceViewController(config)
-          rootViewController.present(chatViewController, animated: true) {
-            promise.resolve(true)
-          }
+        // Criar o CoreClient para registrar os provedores de campos
+        let coreClient = CoreFactory.create(withConfig: config)
+        
+        // Registrar provedor para campos de pré-chat (visíveis)
+        if !self.preChatData.isEmpty {
+          coreClient.setPreChatDelegate(delegate: self, queue: DispatchQueue.main)
+        }
+        
+        // Registrar provedor para campos ocultos
+        if !self.hiddenPreChatData.isEmpty {
+          coreClient.setHiddenPreChatDelegate(delegate: self, queue: DispatchQueue.main)
+        }
+        
+        let chatViewController = ModalInterfaceViewController(config)
+        rootViewController.present(chatViewController, animated: true) {
+          promise.resolve(true)
+        }
       }
     }
     
@@ -160,19 +164,15 @@ public class SalesForceMIAWModule: Module {
       return newId.uuidString
     }
     
-      Function("setHiddenPreChatFields") { (fields: [String: String]) -> Bool in
-        self.preChatData = fields
-        return true
-      }
-    
     Function("registerPushToken") { (token: String) -> Bool in
+      // Implementação de registro de token se necessário
       return true
     }
     
     Events("onChatOpened", "onChatClosed", "onMessageReceived", "onError")
   }
 
-  // MARK: - Helper Methods (Agora dentro da classe)
+  // MARK: - Helper Methods
 
   private func getOrCreateConversationId() -> UUID {
     let key = "ExpoSalesforceMIAW_ConversationId"
@@ -199,17 +199,44 @@ public class SalesForceMIAWModule: Module {
     return topController
   }
     
-    private func buildPreChatFields(from dict: [String: String]) -> [any PreChatField] {
-        var fields: [any PreChatField] = []
-        
-        for (key, value) in dict {
-          // CORREÇÃO: O SDK espera que você use o factory do SMIClientCore
-          // para criar campos, ou use o inicializador público se disponível.
-          // Caso HiddenPreChatField continue falhando, usamos esta abordagem:
-          let field = PreChatFactory.createHiddenField(name: key, value: value)
-          fields.append(field)
+   // Create a function to modify the pre-chat fields
+   private func setPreChatValues(prechatKeyValuePairs: [String: String]) -> (([PreChatField]) async throws -> [PreChatField]) { { prechatFields in
+            prechatFields.enumerated().forEach { (index, value) in
+                let currenPrechatName = value.name
+                print("setPreChatValues prechatField: ", value)
+
+                for prechatKeyValuePair in prechatKeyValuePairs {
+                    print("setPreChatValues prechatKeyValuePair: ", prechatKeyValuePair)
+                    if currenPrechatName == prechatKeyValuePair.key {
+                        prechatFields[index].value = prechatKeyValuePair.value
+                        prechatFields[index].isEditable = false
+                    }
+                }
+            }
+       
+            return prechatFields
         }
-        
-        return fields
+    }
+    
+    private class HiddenPrechatDelegateImplementation: HiddenPreChatDelegate {
+
+      func core(_ core: CoreClient!,
+                conversation: Conversation!,
+                didRequestPrechatValues hiddenPreChatFields: [HiddenPreChatField]!,
+                completionHandler: HiddenPreChatValueCompletion!) {
+
+        // Use the conversation object to inspect info about the conversation
+          
+        var updatedFields = hiddenPreChatFields
+        for (index, field) in updatedFields.enumerated() {
+          if let value = self.hiddenPreChatData[field.name] {
+              updatedFields[index].value = value
+              updatedFields[index].isHidden = true
+          }
+        }
+
+        // Pass pre-chat fields back to SDK
+        completionHandler(updatedFields)
       }
+    }
 }
