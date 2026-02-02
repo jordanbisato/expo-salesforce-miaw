@@ -44,6 +44,8 @@ public class SalesForceMIAWModule: Module {
         developerName: developerName,
         conversationId: convId
       )
+        
+        print("configure UIConfiguration:", self.uiConfiguration)
       
       // Processar campos de pré-chat se fornecidos no configure
       if let preChatFields = config["preChatFields"] as? [String: String] {
@@ -82,48 +84,45 @@ public class SalesForceMIAWModule: Module {
         }
         
         // ============================================
-        // IMPLEMENTAÇÃO CORRETA BASEADA NO SDK
+        // SOLUÇÃO SIMPLIFICADA:
+        // Se você tem APENAS hidden fields, configure-os
+        // Se você tem visible fields, deixe o UI SDK exibir o formulário
+        // Para pular o formulário: use APENAS hidden fields no Salesforce
         // ============================================
         
-        // O SDK usa o Interface com inicializador que aceita preChatFieldValueProvider
-        // Passar closures diretamente para o construtor
+        let coreClient = CoreFactory.create(withConfig: config)
         
+        // Configurar HiddenPreChatDelegate se necessário
+        if !self.hiddenPreChatData.isEmpty {
+          let hiddenDelegate = HiddenPreChatDelegateImpl(hiddenData: self.hiddenPreChatData)
+          coreClient.preChatDelegate = hiddenDelegate
+          print("🔐 HiddenPreChatDelegate configurado com \(self.hiddenPreChatData.count) campos")
+        }
+        
+        // Iniciar o CoreClient
+        coreClient.start()
+        print("🚀 CoreClient iniciado")
+        
+        // Criar o chat view
         let chatView: ModalInterfaceViewController
         
-        // Se temos campos de pré-chat visíveis OU ocultos, precisamos configurar
-        if !self.preChatData.isEmpty || !self.hiddenPreChatData.isEmpty {
-          
-          // Criar CoreClient para configurar delegates
-          let coreClient = CoreFactory.create(withConfig: config)
-          
-          // 1. Configurar HiddenPreChatDelegate se necessário
-          if !self.hiddenPreChatData.isEmpty {
-            let hiddenDelegate = HiddenPreChatDelegateImpl(hiddenData: self.hiddenPreChatData)
-            coreClient.preChatDelegate = hiddenDelegate
-            print("✅ HiddenPreChatDelegate configurado com \(self.hiddenPreChatData.count) campos")
-          }
-          
-          // 2. Criar o chat view com provider de campos visíveis
-          if !self.preChatData.isEmpty {
-            // O provider é uma closure que modifica os campos
-            chatView = ModalInterfaceViewController(
-              config,
-              preChatFieldValueProvider: { [weak self] preChatFields in
-                guard let self = self else { return preChatFields }
-                return try await self.modifyPreChatFields(preChatFields)
-              }
-            )
-            print("✅ PreChatFieldValueProvider configurado com \(self.preChatData.count) campos")
-          } else {
-            chatView = ModalInterfaceViewController(config)
-          }
+        // Se temos campos visíveis para pré-preencher
+        if !self.preChatData.isEmpty {
+          chatView = ModalInterfaceViewController(
+            config,
+            preChatFieldValueProvider: { [weak self] preChatFields in
+              guard let self = self else { return preChatFields }
+              return try await self.modifyPreChatFields(preChatFields)
+            }
+          )
+          print("✅ PreChatFieldValueProvider configurado com \(self.preChatData.count) campos")
         } else {
-          // Sem campos de pré-chat
           chatView = ModalInterfaceViewController(config)
         }
         
         // Apresentar o chat
         rootViewController.present(chatView, animated: true) {
+          print("✅ Chat interface apresentada")
           promise.resolve(true)
         }
       }
@@ -267,7 +266,6 @@ public class SalesForceMIAWModule: Module {
       
       guard var updatedFields = hiddenPreChatFields else {
         print("  ⚠️ Nenhum campo hidden recebido")
-        // Retornar array vazio ao invés de dicionário
         completionHandler([])
         return
       }
