@@ -1,4 +1,17 @@
-I started the development of this module with Manus IA, but i can't do this thing work with my app. If you know a way to make this module works, please tell me (or open a PR)! (:
+STATUS:
+
+iOS:
+Methods: OK
+Building OK
+Set configuration SalesForce: OK
+Open chat: OK
+Sending message: ERROR
+
+Android:
+Methods: OK
+Building: ERROR
+
+If you have the knowledge to make this work, please make a PR! (:
 
 # expo-salesforce-miaw
 
