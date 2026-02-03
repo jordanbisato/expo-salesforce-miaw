@@ -1,7 +1,7 @@
 {
   "name": "expo-salesforce-miaw",
   "version": "0.1.0",
-  "description": "My new module",
+  "description": "Module to integrate SalesForce MIAW chat and React Native",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
@@ -19,7 +19,9 @@
     "react-native",
     "expo",
     "expo-salesforce-miaw",
-    "ExpoSalesForceMIAW"
+    "ExpoSalesForceMIAW",
+    "salesforce",
+    "miaw"
   ],
   "repository": "https://github.com/jordanbisato/expo-salesforce-miaw",
   "bugs": {
@@ -28,16 +30,15 @@
   "author": "Jórdan Luiz Bisato <jordanbisato@hotmail.com> (jordanbisato)",
   "license": "MIT",
   "homepage": "https://github.com/jordanbisato/expo-salesforce-miaw#readme",
-  "dependencies": {},
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  },
   "devDependencies": {
     "@types/react": "~19.0.10",
     "expo-module-scripts": "^5.0.8",
     "expo": "^53.0.25",
     "react-native": "0.79.6"
-  },
-  "peerDependencies": {
-    "expo": "*",
-    "react": "*",
-    "react-native": "*"
   }
 }

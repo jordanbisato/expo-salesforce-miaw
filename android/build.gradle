@@ -1,43 +1,101 @@
 apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
 
-group = 'expo.salesforcemiaw'
+group = 'expo.modules.salesforcemiaw'
 version = '0.1.0'
 
 def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
-apply from: expoModulesCorePlugin
-applyKotlinExpoModulesCorePlugin()
-useCoreDependencies()
-useExpoPublishing()
-
-// If you want to use the managed Android SDK versions from expo-modules-core, set this to true.
-// The Android SDK versions will be bumped from time to time in SDK releases and may introduce breaking changes in your module code.
-// Most of the time, you may like to manage the Android SDK versions yourself.
-def useManagedAndroidSdkVersions = false
-if (useManagedAndroidSdkVersions) {
-  useDefaultAndroidSdkVersions()
-} else {
-  buildscript {
-    // Simple helper that allows the root project to override versions declared by this library.
-    ext.safeExtGet = { prop, fallback ->
-      rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
-    }
-  }
-  project.android {
-    compileSdkVersion safeExtGet("compileSdkVersion", 36)
-    defaultConfig {
-      minSdkVersion safeExtGet("minSdkVersion", 24)
-      targetSdkVersion safeExtGet("targetSdkVersion", 36)
-    }
-  }
+if (expoModulesCorePlugin.exists()) {
+  apply from: expoModulesCorePlugin
+  applyKotlinExpoModulesCorePlugin()
+  useCoreDependencies()
+  useExpoPublishing()
 }
 
+buildscript {
+  // Simple helper that allows the root project to override versions declared by this library.
+  ext.safeExtGet = { prop, fallback ->
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+  }
+
+  // Kotlin version
+  ext.kotlinVersion = safeExtGet("kotlinVersion", "1.9.10")
+}
+
+// Android configuration
 android {
-  namespace "expo.salesforcemiaw"
+  // IMPORTANTE: namespace é obrigatório no Android Gradle Plugin 8.0+
+  namespace "expo.modules.salesforcemiaw"
+  
+  compileSdkVersion safeExtGet("compileSdkVersion", 34)
+  
   defaultConfig {
+    minSdkVersion safeExtGet("minSdkVersion", 24)
+    targetSdkVersion safeExtGet("targetSdkVersion", 34)
     versionCode 1
     versionName "0.1.0"
   }
+
+  buildFeatures {
+    dataBinding true
+  }
+
+  publishing {
+    singleVariant('release') {
+      withSourcesJar()
+    }
+  }
+  
+  buildTypes {
+    release {
+      minifyEnabled false
+    }
+  }
+  
   lintOptions {
     abortOnError false
   }
+  
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+  maven {
+    url "https://s3.amazonaws.com/inapp.salesforce.com/public/android/"
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  
+  // Kotlin
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
+  
+  // AndroidX
+  implementation "androidx.appcompat:appcompat:1.6.1"
+  
+  // Salesforce Messaging In-App SDK
+  // IMPORTANTE: Verifique a versão mais recente em:
+  // https://github.com/Salesforce-Async-Messaging/messaging-in-app-android/releases
+  implementation "com.salesforce.service.smi:core:1.9.2"
+  implementation "com.salesforce.service.smi:ui:1.9.2"
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+            }
+        }
+    }
 }
