@@ -39,12 +39,6 @@ android {
   buildFeatures {
     dataBinding true
   }
-
-  publishing {
-    singleVariant('release') {
-      withSourcesJar()
-    }
-  }
   
   buildTypes {
     release {
@@ -70,7 +64,7 @@ repositories {
   mavenCentral()
   google()
   maven {
-    url "https://s3.amazonaws.com/inapp.salesforce.com/public/android/"
+    url "https://s3.amazonaws.com/inapp.salesforce.com/public/android"
   }
 }
 
@@ -86,16 +80,7 @@ dependencies {
   // Salesforce Messaging In-App SDK
   // IMPORTANTE: Verifique a versão mais recente em:
   // https://github.com/Salesforce-Async-Messaging/messaging-in-app-android/releases
-  implementation "com.salesforce.service.smi:core:1.9.2"
-  implementation "com.salesforce.service.smi:ui:1.9.2"
-}
-
-afterEvaluate {
-    publishing {
-        publications {
-            release(MavenPublication) {
-                from components.release
-            }
-        }
-    }
+  // implementation "com.salesforce.service.smi:core:1.9.2"
+  // implementation "com.salesforce.service.smi:ui:1.9.2"
+  implementation "com.salesforce.service:messaging-inapp-ui:1.10.2"
 }

@@ -5,8 +5,6 @@ import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatActivity
 import com.salesforce.android.smi.core.CoreClient
 import com.salesforce.android.smi.core.CoreConfiguration
-import com.salesforce.android.smi.core.PreChatField
-import com.salesforce.android.smi.core.PreChatValuesProvider
 import com.salesforce.android.smi.ui.UIClient
 import com.salesforce.android.smi.ui.UIConfiguration
 import expo.modules.kotlin.Promise
@@ -21,7 +19,6 @@ class ExpoSalesForceMIAWModule : Module() {
   private var uiConfiguration: UIConfiguration? = null
   private var coreConfiguration: CoreConfiguration? = null
   private var uiClient: UIClient? = null
-  private var coreClient: CoreClient? = null
   private var conversationId: String? = null
 
   // Armazenamento para campos de pré-chat
@@ -67,59 +64,23 @@ class ExpoSalesForceMIAWModule : Module() {
         }
 
         // Criar configuração core
-        coreConfiguration = CoreConfiguration.create(
-          url = url,
+        // CoreConfiguration usa construtor direto, não Builder
+        coreConfiguration = CoreConfiguration(
+          serviceAPI = url,
           organizationId = orgId,
-          developerName = developerName,
-          conversationId = convId
+          developerName = developerName
         )
 
         // Criar configuração UI
-        uiConfiguration = UIConfiguration.create(coreConfiguration!!)
-
-        // Criar CoreClient
-        coreClient = CoreClient.Factory.create(context, coreConfiguration!!)
-
-        // Registrar provider de hidden fields se necessário
-        if (hiddenPreChatData.isNotEmpty()) {
-          val hiddenProvider = HiddenPreChatValuesProviderImpl(hiddenPreChatData)
-          coreClient?.registerHiddenPreChatValuesProvider(hiddenProvider)
-          Log.d("SalesforceMIAW", "✅ HiddenPreChatValuesProvider registrado com ${hiddenPreChatData.size} campos")
-        }
+        // UIConfiguration também usa construtor direto
+        uiConfiguration = UIConfiguration(
+          coreConfiguration = coreConfiguration!!
+        )
 
         // Criar UIClient
-        uiClient = UIClient.createClient(context, uiConfiguration!!)
+        uiClient = UIClient(context, uiConfiguration!!)
 
-        // Registrar provider de campos visíveis se necessário
-        if (preChatData.isNotEmpty()) {
-          uiClient?.preChatFieldValueProvider = { preChatFields ->
-            Log.d("SalesforceMIAW", "🔵 preChatFieldValueProvider chamado com ${preChatFields.size} campos")
-
-            preChatFields.map { field ->
-              val fieldName = field.name
-              Log.d("SalesforceMIAW", "  → Campo: $fieldName")
-
-              // Se temos um valor para este campo, popula e configura
-              if (preChatData.containsKey(fieldName)) {
-                val value = preChatData[fieldName]!!
-                Log.d("SalesforceMIAW", "    ✅ Preenchido com: $value | isEditable: false")
-
-                PreChatField(
-                  name = field.name,
-                  label = field.label,
-                  value = value,
-                  isRequired = field.isRequired,
-                  isEditable = false, // Campo bloqueado (read-only)
-                  isHidden = field.isHidden,
-                  maxLength = field.maxLength
-                )
-              } else {
-                field
-              }
-            }
-          }
-          Log.d("SalesforceMIAW", "✅ preChatFieldValueProvider configurado com ${preChatData.size} campos")
-        }
+        Log.d("SalesforceMIAW", "✅ SDK configurado com sucesso!")
 
         true
       } catch (e: Exception) {
@@ -152,14 +113,6 @@ class ExpoSalesForceMIAWModule : Module() {
         hiddenPreChatData.clear()
         hiddenPreChatData.putAll(fields)
         Log.d("SalesforceMIAW", "setHiddenPreChatFields: $fields")
-
-        // Re-registrar o provider se já existe um coreClient
-        coreClient?.let { client ->
-          val hiddenProvider = HiddenPreChatValuesProviderImpl(hiddenPreChatData)
-          client.registerHiddenPreChatValuesProvider(hiddenProvider)
-          Log.d("SalesforceMIAW", "✅ HiddenPreChatValuesProvider re-registrado")
-        }
-
         true
       } catch (e: Exception) {
         Log.e("SalesforceMIAW", "Erro no setHiddenPreChatFields: ${e.message}", e)
@@ -185,7 +138,13 @@ class ExpoSalesForceMIAWModule : Module() {
         activity.runOnUiThread {
           try {
             Log.d("SalesforceMIAW", "🎨 Abrindo interface do chat...")
-            client.openConversation(activity)
+
+            // Abrir o chat com o conversation ID
+            client.openConversation(
+              activity = activity,
+              conversationId = conversationId?.let { UUID.fromString(it) } ?: UUID.randomUUID()
+            )
+
             Log.d("SalesforceMIAW", "✅ Chat interface apresentada")
             promise.resolve(true)
           } catch (e: Exception) {
@@ -237,54 +196,8 @@ class ExpoSalesForceMIAWModule : Module() {
       try {
         conversationId = newId
         prefs.edit().putString("conversationId", newId).apply()
-
-        // Reconfigurar se já existir uma configuração
-        coreConfiguration?.let { coreConfig ->
-          val newCoreConfig = CoreConfiguration.create(
-            url = coreConfig.url,
-            organizationId = coreConfig.organizationId,
-            developerName = coreConfig.developerName,
-            conversationId = newId
-          )
-
-          coreConfiguration = newCoreConfig
-          uiConfiguration = UIConfiguration.create(newCoreConfig)
-
-          // Recriar clients
-          coreClient = CoreClient.Factory.create(context, newCoreConfig)
-
-          // Re-registrar hidden provider se necessário
-          if (hiddenPreChatData.isNotEmpty()) {
-            val hiddenProvider = HiddenPreChatValuesProviderImpl(hiddenPreChatData)
-            coreClient?.registerHiddenPreChatValuesProvider(hiddenProvider)
-          }
-
-          uiClient = UIClient.createClient(context, uiConfiguration!!)
-
-          // Re-registrar visible provider se necessário
-          if (preChatData.isNotEmpty()) {
-            uiClient?.preChatFieldValueProvider = { preChatFields ->
-              preChatFields.map { field ->
-                if (preChatData.containsKey(field.name)) {
-                  PreChatField(
-                    name = field.name,
-                    label = field.label,
-                    value = preChatData[field.name]!!,
-                    isRequired = field.isRequired,
-                    isEditable = false,
-                    isHidden = field.isHidden,
-                    maxLength = field.maxLength
-                  )
-                } else {
-                  field
-                }
-              }
-            }
-          }
-
-          Log.d("SalesforceMIAW", "ConversationId atualizado para: $newId")
-          true
-        } ?: false
+        Log.d("SalesforceMIAW", "ConversationId atualizado para: $newId")
+        true
       } catch (e: Exception) {
         Log.e("SalesforceMIAW", "Erro no setConversationId: ${e.message}", e)
         e.printStackTrace()
@@ -299,52 +212,6 @@ class ExpoSalesForceMIAWModule : Module() {
       val newId = UUID.randomUUID().toString()
       conversationId = newId
       prefs.edit().putString("conversationId", newId).apply()
-
-      // Reconfigurar se já existir uma configuração
-      coreConfiguration?.let { coreConfig ->
-        val newCoreConfig = CoreConfiguration.create(
-          url = coreConfig.url,
-          organizationId = coreConfig.organizationId,
-          developerName = coreConfig.developerName,
-          conversationId = newId
-        )
-
-        coreConfiguration = newCoreConfig
-        uiConfiguration = UIConfiguration.create(newCoreConfig)
-
-        // Recriar clients
-        coreClient = CoreClient.Factory.create(context, newCoreConfig)
-
-        // Re-registrar hidden provider se necessário
-        if (hiddenPreChatData.isNotEmpty()) {
-          val hiddenProvider = HiddenPreChatValuesProviderImpl(hiddenPreChatData)
-          coreClient?.registerHiddenPreChatValuesProvider(hiddenProvider)
-        }
-
-        uiClient = UIClient.createClient(context, uiConfiguration!!)
-
-        // Re-registrar visible provider se necessário
-        if (preChatData.isNotEmpty()) {
-          uiClient?.preChatFieldValueProvider = { preChatFields ->
-            preChatFields.map { field ->
-              if (preChatData.containsKey(field.name)) {
-                PreChatField(
-                  name = field.name,
-                  label = field.label,
-                  value = preChatData[field.name]!!,
-                  isRequired = field.isRequired,
-                  isEditable = false,
-                  isHidden = field.isHidden,
-                  maxLength = field.maxLength
-                )
-              } else {
-                field
-              }
-            }
-          }
-        }
-      }
-
       Log.d("SalesforceMIAW", "Nova conversação criada: $newId")
       newId
     }
@@ -366,21 +233,19 @@ class ExpoSalesForceMIAWModule : Module() {
         conversationId = convId
 
         // Criar configuração core
-        coreConfiguration = CoreConfiguration.create(
-          url = url,
+        coreConfiguration = CoreConfiguration(
+          serviceAPI = url,
           organizationId = orgId,
-          developerName = developerName,
-          conversationId = convId
+          developerName = developerName
         )
 
         // Criar configuração UI
-        uiConfiguration = UIConfiguration.create(coreConfiguration!!)
-
-        // Criar CoreClient
-        coreClient = CoreClient.Factory.create(context, coreConfiguration!!)
+        uiConfiguration = UIConfiguration(
+          coreConfiguration = coreConfiguration!!
+        )
 
         // Criar UIClient
-        uiClient = UIClient.createClient(context, uiConfiguration!!)
+        uiClient = UIClient(context, uiConfiguration!!)
 
         Log.d("SalesforceMIAW", "Configurado a partir do arquivo: $fileName.json")
         true
@@ -423,50 +288,5 @@ class ExpoSalesForceMIAWModule : Module() {
     val newId = UUID.randomUUID().toString()
     prefs.edit().putString("conversationId", newId).apply()
     return newId
-  }
-
-  // ============================================
-  // PROVIDER PARA HIDDEN PRE-CHAT FIELDS
-  // ============================================
-
-  /**
-   * Provider para campos OCULTOS (Hidden PreChat Fields)
-   * Estes campos NÃO aparecem na interface, são enviados nos bastidores
-   */
-  private class HiddenPreChatValuesProviderImpl(
-    private val hiddenData: Map<String, String>
-  ) : PreChatValuesProvider {
-
-    override fun setValues(
-      hiddenPreChatFields: List<PreChatField>,
-      completionHandler: (List<PreChatField>) -> Unit
-    ) {
-      Log.d("SalesforceMIAW", "🟣 setValues (hidden) chamado com ${hiddenPreChatFields.size} campos")
-
-      val updatedFields = hiddenPreChatFields.map { field ->
-        val fieldName = field.name
-        Log.d("SalesforceMIAW", "  → Campo hidden: $fieldName")
-
-        if (hiddenData.containsKey(fieldName)) {
-          val value = hiddenData[fieldName]!!
-          Log.d("SalesforceMIAW", "    ✅ Preenchido com: $value")
-
-          PreChatField(
-            name = field.name,
-            label = field.label,
-            value = value,
-            isRequired = field.isRequired,
-            isEditable = field.isEditable,
-            isHidden = true,
-            maxLength = field.maxLength
-          )
-        } else {
-          field
-        }
-      }
-
-      // Retornar os campos atualizados para o SDK
-      completionHandler(updatedFields)
-    }
   }
 }
