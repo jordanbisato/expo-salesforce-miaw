@@ -1,15 +1,15 @@
 ### STATUS:
 
-iOS:
-Methods: OK
-Building OK
-Set configuration SalesForce: OK
-Open chat: OK
-Sending message: ERROR
+#### iOS:
+* Methods: OK
+* Building OK
+* Set configuration SalesForce: OK
+* Open chat: OK
+* Sending message: ERROR
 
-Android:
-Methods: OK
-Building: ERROR
+#### Android:
+* Methods: OK
+* Building: ERROR
 
 If you have the knowledge to make this work, please make a PR! (:
 
