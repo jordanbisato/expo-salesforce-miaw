@@ -13,6 +13,10 @@
 
 If you have the knowledge to make this work, please make a PR! (:
 
+But if you need a quick solution, use expo-salesforce-miaw-local instead: 
+
+https://github.com/jordanbisato/expo-salesforce-miaw-local
+
 # expo-salesforce-miaw
 
 This module provides a native integration for the Salesforce Messaging In-App and Web (MIAW) SDK for React Native applications, with full support for Expo (SDK 53+). [Salesforce Messaging In-App and Web (MIAW)](https://developer.salesforce.com/docs/service/messaging-in-app/guide/overview.html)
