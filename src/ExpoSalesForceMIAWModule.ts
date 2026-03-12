@@ -5,18 +5,11 @@ import {
   SalesForceMIAWConfig,
 } from "./ExpoSalesForceMIAW.types";
 
-declare class ExpoSalesForceMIAWModule extends NativeModule<ExpoSalesForceMIAWModuleEvents> {
-  openChat(): void;
-  configure(config: SalesForceMIAWConfig): Promise<boolean>;
+declare class ExpoSalesForceMIAWMod extends NativeModule<ExpoSalesForceMIAWModuleEvents> {
+  openChat(): Promise<boolean>;
+  configure(config: SalesForceMIAWConfig): Promise<string | null | undefined>;
   closeChat(): void;
-  setPreChatFields(fields: Record<string, string>): Promise<boolean>;
-  setHiddenPreChatFields(fields: Record<string, string>): Promise<boolean>;
-  registerPushToken(token: string): Promise<boolean>;
-  getConversationId(): Promise<string | null>;
-  clearConversationId(): Promise<string>;
 }
 
 // This call loads the native module object from the JSI.
-export default requireNativeModule<ExpoSalesForceMIAWModule>(
-  "ExpoSalesForceMIAW",
-);
+export default requireNativeModule<ExpoSalesForceMIAWMod>("ExpoSalesForceMIAW");

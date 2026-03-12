@@ -1,292 +1,254 @@
 package expo.modules.salesforcemiaw
 
+import android.app.Activity
+import android.app.Application
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.appcompat.app.AppCompatActivity
+import android.os.Build
+import android.os.Bundle
+import android.util.Log
+import com.salesforce.android.smi.common.api.Result
 import com.salesforce.android.smi.core.CoreClient
 import com.salesforce.android.smi.core.CoreConfiguration
+import com.salesforce.android.smi.core.events.CoreEvent
+import com.salesforce.android.smi.network.data.domain.conversationEntry.entryPayload.EntryPayload
 import com.salesforce.android.smi.ui.UIClient
 import com.salesforce.android.smi.ui.UIConfiguration
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import org.json.JSONObject
-import java.io.InputStream
+import kotlinx.coroutines.*
+import java.net.URL
 import java.util.UUID
-import android.util.Log
+import java.util.concurrent.atomic.AtomicReference
+import com.salesforce.android.smi.network.internal.dto.response.remoteconfig.ConversationOptionsConfiguration
+import com.salesforce.android.smi.network.internal.dto.response.remoteconfig.TranscriptConfiguration
+import com.salesforce.android.smi.network.internal.dto.response.businesshours.BusinessHoursInfo
 
 class ExpoSalesForceMIAWModule : Module() {
-  private var uiConfiguration: UIConfiguration? = null
+  private var coreClient: CoreClient? = null
   private var coreConfiguration: CoreConfiguration? = null
-  private var uiClient: UIClient? = null
-  private var conversationId: String? = null
+  private var currentConversationId: UUID? = null
+  private var userCanEditPreChatFields: Boolean = false
+  private var finalizeSessionOnClose: Boolean = false
 
-  // Armazenamento para campos de pré-chat
-  private var preChatData: MutableMap<String, String> = mutableMapOf()
-  private var hiddenPreChatData: MutableMap<String, String> = mutableMapOf()
+  private val preChatFieldsMap = mutableMapOf<String, String>()
+  private val hiddenFieldsMap = mutableMapOf<String, String>()
 
-  private val prefs: SharedPreferences by lazy {
-    context.getSharedPreferences("ExpoSalesForceMIAW", Context.MODE_PRIVATE)
-  }
+  private val moduleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+  private var activityLifecycleCallbacks: Application.ActivityLifecycleCallbacks? = null
+  private val messagingActivityRef = AtomicReference<Activity?>(null)
 
-  private val context: Context
-    get() = appContext.reactContext ?: throw IllegalStateException("React context is null")
+  private val TAG = "ExpoSalesForceMIAW"
 
   override fun definition() = ModuleDefinition {
     Name("ExpoSalesForceMIAW")
 
-    // ============================================
-    // CONFIGURAR O SDK
-    // ============================================
+    Events("onChatOpened", "onChatClosed", "onTyping", "onQueueUpdate")
+
+    OnCreate {
+      setupLifecycleTracker()
+    }
+
+    OnDestroy { cleanup() }
+
+    AsyncFunction("getBusinessHoursStatus") { promise: Promise ->
+      val client = coreClient
+      if (client == null) {
+        promise.reject("ERR_NOT_CONFIGURED", "CoreClient não inicializado", null)
+        return@AsyncFunction
+      }
+      moduleScope.launch {
+        try {
+          val result = client.retrieveBusinessHours()
+          val businessHoursInfo: BusinessHoursInfo? = (result as? Result.Success)?.data
+          if (businessHoursInfo != null) {
+            promise.resolve(
+              mapOf(
+                "isWithinBusinessHours" to businessHoursInfo.isWithinBusinessHours(),
+                "name" to businessHoursInfo.name,
+                "isActive" to businessHoursInfo.isActive,
+                "requestTimestamp" to businessHoursInfo.requestTimestamp
+              )
+            )
+          } else {
+            promise.reject("ERR_FETCH", "Não foi possível recuperar horários", null)
+          }
+        } catch (e: Exception) {
+          promise.reject("ERR_EXCEPTION", e.message, null)
+        }
+      }
+    }
+
+    AsyncFunction("resetChatSession") { promise: Promise ->
+      moduleScope.launch {
+        internalCloseSync()
+        promise.resolve(true)
+      }
+    }
+
+    AsyncFunction("closeChat") { promise: Promise ->
+      moduleScope.launch {
+        try {
+          internalCloseSync()
+          sendEvent("onChatClosed", mapOf("reason" to "manual_close"))
+          promise.resolve(true)
+        } catch (e: Exception) {
+          promise.reject("ERR_CLOSE", e.message, null)
+        }
+      }
+    }
+
     Function("configure") { config: Map<String, Any?> ->
       try {
-        val url = config["url"] as? String ?: return@Function false
-        val orgId = config["orgId"] as? String ?: return@Function false
-        val developerName = config["developerName"] as? String ?: return@Function false
+        val serviceUrl = config["url"] as? String ?: ""
+        val orgId = config["orgId"] as? String ?: ""
+        val devName = config["developerName"] as? String ?: ""
 
-        Log.d("SalesforceMIAW", "configure called with url=$url, orgId=$orgId, developerName=$developerName")
+        if (serviceUrl.isEmpty() || orgId.isEmpty()) return@Function null
 
-        // Obter ou criar conversation ID
-        val convId = config["conversationId"] as? String ?: getOrCreateConversationId()
-        conversationId = convId
+        val convIdStr = config["conversationId"] as? String
+        currentConversationId =
+          if (!convIdStr.isNullOrEmpty()) UUID.fromString(convIdStr) else UUID.randomUUID()
 
-        // Processar campos de pré-chat se fornecidos
-        (config["preChatFields"] as? Map<String, String>)?.let {
-          Log.d("SalesforceMIAW", "preChatFields: $it")
-          preChatData.clear()
-          preChatData.putAll(it)
+        coreConfiguration = CoreConfiguration(URL(serviceUrl), orgId, devName)
+
+        userCanEditPreChatFields = config["userCanEditPreChatFields"] as? Boolean ?: false
+        finalizeSessionOnClose = config["finalizeSessionOnClose"] as? Boolean ?: false
+
+        preChatFieldsMap.clear()
+        (config["preChatFields"] as? Map<*, *>)?.forEach { (k, v) ->
+          preChatFieldsMap[k.toString()] = v.toString()
         }
 
-        (config["hiddenPreChatFields"] as? Map<String, String>)?.let {
-          Log.d("SalesforceMIAW", "hiddenPreChatFields: $it")
-          hiddenPreChatData.clear()
-          hiddenPreChatData.putAll(it)
+        hiddenFieldsMap.clear()
+        (config["hiddenPreChatFields"] as? Map<*, *>)?.forEach { (k, v) ->
+          hiddenFieldsMap[k.toString()] = v.toString()
         }
 
-        // Criar configuração core
-        // CoreConfiguration usa construtor direto, não Builder
-        coreConfiguration = CoreConfiguration(
-          serviceAPI = url,
-          organizationId = orgId,
-          developerName = developerName
-        )
-
-        // Criar configuração UI
-        // UIConfiguration também usa construtor direto
-        uiConfiguration = UIConfiguration(
-          coreConfiguration = coreConfiguration!!
-        )
-
-        // Criar UIClient
-        uiClient = UIClient(context, uiConfiguration!!)
-
-        Log.d("SalesforceMIAW", "✅ SDK configurado com sucesso!")
-
-        true
+        currentConversationId?.toString()
       } catch (e: Exception) {
-        Log.e("SalesforceMIAW", "Erro no configure: ${e.message}", e)
-        e.printStackTrace()
-        false
+        Log.e(TAG, "Erro configure: ${e.message}")
+        null
       }
     }
 
-    // ============================================
-    // DEFINIR CAMPOS DE PRÉ-CHAT VISÍVEIS
-    // ============================================
-    Function("setPreChatFields") { fields: Map<String, String> ->
-      try {
-        preChatData.clear()
-        preChatData.putAll(fields)
-        Log.d("SalesforceMIAW", "setPreChatFields: $fields")
-        true
-      } catch (e: Exception) {
-        Log.e("SalesforceMIAW", "Erro no setPreChatFields: ${e.message}", e)
-        false
-      }
-    }
-
-    // ============================================
-    // DEFINIR CAMPOS DE PRÉ-CHAT OCULTOS
-    // ============================================
-    Function("setHiddenPreChatFields") { fields: Map<String, String> ->
-      try {
-        hiddenPreChatData.clear()
-        hiddenPreChatData.putAll(fields)
-        Log.d("SalesforceMIAW", "setHiddenPreChatFields: $fields")
-        true
-      } catch (e: Exception) {
-        Log.e("SalesforceMIAW", "Erro no setHiddenPreChatFields: ${e.message}", e)
-        false
-      }
-    }
-
-    // ============================================
-    // ABRIR A INTERFACE DE CHAT
-    // ============================================
     AsyncFunction("openChat") { promise: Promise ->
-      try {
-        val client = uiClient ?: run {
-          promise.reject("ERR_NOT_CONFIGURED", "SDK not configured. Call configure() first.", null)
-          return@AsyncFunction
-        }
+      whenChatReady(promise) { client, config ->
+        val activity = appContext.currentActivity ?: return@whenChatReady promise.reject(
+          "ERR_NO_ACTIVITY",
+          "Activity não disponível",
+          null
+        )
+        val conversationId = currentConversationId ?: UUID.randomUUID()
+        val conversationClient = client.conversationClient(conversationId)
 
-        val activity = appContext.currentActivity as? AppCompatActivity ?: run {
-          promise.reject("ERR_NO_ACTIVITY", "Could not find current activity.", null)
-          return@AsyncFunction
-        }
+        moduleScope.launch {
+          val result = client.retrieveRemoteConfiguration()
+          if (result is Result.Success) {
+            val remoteConfig = result.data
+            remoteConfig.forms.firstOrNull()?.formFields?.forEach { field ->
+              preChatFieldsMap[field.name]?.let { field.userInput = it }
+            }
+            conversationClient.submitRemoteConfiguration(remoteConfig)
 
-        activity.runOnUiThread {
-          try {
-            Log.d("SalesforceMIAW", "🎨 Abrindo interface do chat...")
-
-            // Abrir o chat com o conversation ID
-            client.openConversation(
-              activity = activity,
-              conversationId = conversationId?.let { UUID.fromString(it) } ?: UUID.randomUUID()
-            )
-
-            Log.d("SalesforceMIAW", "✅ Chat interface apresentada")
-            promise.resolve(true)
-          } catch (e: Exception) {
-            Log.e("SalesforceMIAW", "Erro ao abrir chat: ${e.message}", e)
-            promise.reject("ERR_OPEN_CHAT", "Failed to open chat: ${e.message}", e)
+            withContext(Dispatchers.Main) {
+              val uiConfig = UIConfiguration(
+                config, conversationId,
+                transcriptConfiguration = TranscriptConfiguration(allowTranscriptDownload = true),
+                conversationOptionsConfiguration = ConversationOptionsConfiguration(allowEndChat = true),
+              )
+              val uiClient = UIClient.Factory.create(uiConfig)
+              uiClient.openConversationActivity(activity)
+              sendEvent("onChatOpened", mapOf("conversationId" to conversationId.toString()))
+              promise.resolve(true)
+            }
           }
         }
-      } catch (e: Exception) {
-        Log.e("SalesforceMIAW", "Erro no openChat: ${e.message}", e)
-        promise.reject("ERR_OPEN_CHAT", "Failed to open chat: ${e.message}", e)
       }
     }
-
-    // ============================================
-    // FECHAR A INTERFACE DE CHAT
-    // ============================================
-    AsyncFunction("closeChat") { promise: Promise ->
-      try {
-        val activity = appContext.currentActivity as? AppCompatActivity ?: run {
-          promise.reject("ERR_NO_ACTIVITY", "Could not find current activity.", null)
-          return@AsyncFunction
-        }
-
-        activity.runOnUiThread {
-          try {
-            // O chat é fechado automaticamente quando o usuário fecha a tela
-            Log.d("SalesforceMIAW", "✅ Chat fechado")
-            promise.resolve(true)
-          } catch (e: Exception) {
-            promise.reject("ERR_CLOSE_CHAT", "Failed to close chat: ${e.message}", e)
-          }
-        }
-      } catch (e: Exception) {
-        promise.reject("ERR_CLOSE_CHAT", "Failed to close chat: ${e.message}", e)
-      }
-    }
-
-    // ============================================
-    // OBTER O CONVERSATION ID ATUAL
-    // ============================================
-    Function("getConversationId") {
-      conversationId
-    }
-
-    // ============================================
-    // DEFINIR UM NOVO CONVERSATION ID
-    // ============================================
-    Function("setConversationId") { newId: String ->
-      try {
-        conversationId = newId
-        prefs.edit().putString("conversationId", newId).apply()
-        Log.d("SalesforceMIAW", "ConversationId atualizado para: $newId")
-        true
-      } catch (e: Exception) {
-        Log.e("SalesforceMIAW", "Erro no setConversationId: ${e.message}", e)
-        e.printStackTrace()
-        false
-      }
-    }
-
-    // ============================================
-    // LIMPAR O CONVERSATION ID (CRIAR NOVO)
-    // ============================================
-    Function("clearConversationId") {
-      val newId = UUID.randomUUID().toString()
-      conversationId = newId
-      prefs.edit().putString("conversationId", newId).apply()
-      Log.d("SalesforceMIAW", "Nova conversação criada: $newId")
-      newId
-    }
-
-    // ============================================
-    // CONFIGURAR USANDO ARQUIVO config.json
-    // ============================================
-    Function("configureFromFile") { fileName: String ->
-      try {
-        val inputStream: InputStream = context.assets.open("$fileName.json")
-        val json = inputStream.bufferedReader().use { it.readText() }
-        val jsonObject = JSONObject(json)
-
-        val url = jsonObject.getString("url")
-        val orgId = jsonObject.getString("orgId")
-        val developerName = jsonObject.getString("developerName")
-
-        val convId = getOrCreateConversationId()
-        conversationId = convId
-
-        // Criar configuração core
-        coreConfiguration = CoreConfiguration(
-          serviceAPI = url,
-          organizationId = orgId,
-          developerName = developerName
-        )
-
-        // Criar configuração UI
-        uiConfiguration = UIConfiguration(
-          coreConfiguration = coreConfiguration!!
-        )
-
-        // Criar UIClient
-        uiClient = UIClient(context, uiConfiguration!!)
-
-        Log.d("SalesforceMIAW", "Configurado a partir do arquivo: $fileName.json")
-        true
-      } catch (e: Exception) {
-        Log.e("SalesforceMIAW", "Erro no configureFromFile: ${e.message}", e)
-        e.printStackTrace()
-        false
-      }
-    }
-
-    // ============================================
-    // REGISTRAR TOKEN DE PUSH NOTIFICATION
-    // ============================================
-    Function("registerPushToken") { token: String ->
-      try {
-        // TODO: Implementar registro de push token quando necessário
-        Log.d("SalesforceMIAW", "registerPushToken: $token")
-        true
-      } catch (e: Exception) {
-        Log.e("SalesforceMIAW", "Erro no registerPushToken: ${e.message}", e)
-        e.printStackTrace()
-        false
-      }
-    }
-
-    // Eventos
-    Events("onChatOpened", "onChatClosed", "onMessageReceived", "onError")
   }
 
-  // ============================================
-  // HELPER METHODS
-  // ============================================
-
-  private fun getOrCreateConversationId(): String {
-    val existingId = prefs.getString("conversationId", null)
-    if (existingId != null) {
-      return existingId
+  private suspend fun handleCoreEvent(event: CoreEvent) {
+    Log.i(TAG, "handleCoreEvent: ${event}")
+    if (event is CoreEvent.ConversationEvent.Entry) {
+      val payload = event.conversationEntry.payload
+      when (payload) {
+        is EntryPayload.CloseConversationPayload -> {
+          Log.i(TAG, "EntryPayload.CloseConversationPayload")
+          finalizeSession("session_ended")
+        }
+        is EntryPayload.SessionStatusChangedPayload -> {
+          val status = payload.sessionStatus.toString()
+          Log.i(TAG, "EntryPayload.SessionStatusChangedPayload status: ${status}")
+          if (status.contains("Closed", true) || status.contains("Ended", true)) {
+            finalizeSession("session_terminated")
+          }
+        }
+        is EntryPayload.QueuePositionPayload -> sendEvent("onQueueUpdate", mapOf("position" to payload.position))
+        is EntryPayload.TypingStartedIndicatorPayload -> sendEvent("onTyping", mapOf("isTyping" to true))
+        is EntryPayload.TypingStoppedIndicatorPayload -> sendEvent("onTyping", mapOf("isTyping" to false))
+        else -> Unit
+      }
     }
+  }
 
-    val newId = UUID.randomUUID().toString()
-    prefs.edit().putString("conversationId", newId).apply()
-    return newId
+  private fun whenChatReady(promise: Promise?, callback: (client: CoreClient, config: CoreConfiguration) -> Unit) {
+    Log.i(TAG, "whenChatReady")
+    val config = coreConfiguration ?: return
+    val context = appContext.reactContext ?: return
+    val client = coreClient ?: CoreClient.Factory.create(context, config).also {
+      coreClient = it
+      it.start(moduleScope)
+    }
+    callback(client, config)
+  }
+
+  private fun finalizeSession(reason: String) {
+    Log.i(TAG, "finalizeSession: ${reason}")
+    moduleScope.launch(Dispatchers.Main) {
+      sendEvent("onChatClosed", mapOf("reason" to reason))
+      internalCloseSync()
+      messagingActivityRef.getAndSet(null)?.finish()
+    }
+  }
+
+  private suspend fun internalCloseSync() {
+    Log.i(TAG, "internalCloseSync")
+    withContext(Dispatchers.IO) {
+      try {
+        currentConversationId?.let { id -> coreClient?.conversationClient(id)?.closeConversation() }
+        coreClient?.stop()
+        appContext.reactContext?.let { CoreClient.clearStorage(it) }
+        coreClient = null
+        currentConversationId = null
+      } catch (e: Exception) { Log.e(TAG, "Erro close: ${e.message}") }
+    }
+  }
+
+  private fun setupLifecycleTracker() {
+    Log.i(TAG, "setupLifecycleTracker")
+    val app = appContext.currentActivity?.application ?: return
+    activityLifecycleCallbacks = object : Application.ActivityLifecycleCallbacks {
+      override fun onActivityCreated(activity: Activity, bundle: Bundle?) {
+        Log.i(TAG, "setupLifecycleTracker onActivityCreated")
+        if (activity.localClassName.contains("MessagingInappActivity", true)) messagingActivityRef.set(activity)
+      }
+      override fun onActivityDestroyed(activity: Activity) {
+        Log.i(TAG, "setupLifecycleTracker onActivityDestroyed")
+        if (activity.localClassName.contains("MessagingInappActivity", true)) {
+          messagingActivityRef.compareAndSet(activity, null)
+          sendEvent("onChatClosed", mapOf("reason" to "user_manually_closed"))
+        }
+      }
+      override fun onActivityStarted(a: Activity) {}
+      override fun onActivityResumed(a: Activity) {}
+      override fun onActivityPaused(a: Activity) {}
+      override fun onActivityStopped(a: Activity) {}
+      override fun onActivitySaveInstanceState(a: Activity, b: Bundle) {}
+    }.also { app.registerActivityLifecycleCallbacks(it) }
+  }
+  private fun cleanup() {
+    activityLifecycleCallbacks?.let { appContext.currentActivity?.application?.unregisterActivityLifecycleCallbacks(it) }
+    moduleScope.cancel()
   }
 }

@@ -1,288 +1,224 @@
 import ExpoModulesCore
+import SwiftUI
 import SMIClientCore
 import SMIClientUI
 import UIKit
 
 public class SalesForceMIAWModule: Module {
-  private var conversationId: UUID?
-  private var uiConfiguration: UIConfiguration?
+    private var uiConfiguration: UIConfiguration?
+    private var coreDelegateAdapter: SalesForceMIAWDelegateAdapter?
+    private var coreClient: CoreClient?
+    private var currentConversationId: UUID?
+    private var userCanEditPreChatFields: Bool = false
+    private var finalizeSessionOnClose: Bool = false
+    private var preChatData: [String: String] = [:]
+    private var hiddenPreChatData: [String: String] = [:]
+    private var dataKey: String = "ExpoSalesForceMIAW_ConversationId"
   
-  // Armazenamento para campos de pré-chat
-  private var preChatData: [String: String] = [:]
-  private var hiddenPreChatData: [String: String] = [:]
-
   public func definition() -> ModuleDefinition {
     Name("ExpoSalesForceMIAW")
+    
+      OnCreate {
+          self.currentConversationId = nil
+          self.uiConfiguration = nil
+          self.preChatData = [:]
+          self.hiddenPreChatData = [:]
+          self.dataKey = "ExpoSalesForceMIAW_ConversationId"
+      }
+      
+      Events("onChatOpened", "onChatClosed")
+      
+      Function("closeChat") {
+          self.closeChatFunc()
+      }
+      
+      AsyncFunction("deleteConversationData") { (promise: Promise) in
+          DispatchQueue.main.async {
+              self.deleteConversationId()
+              self.currentConversationId = nil
+              promise.resolve(true)
+          }
+      }
+      
+      Function("configure") { (config: [String: Any]) -> String? in
 
-    OnCreate {
-      self.conversationId = nil
-      self.uiConfiguration = nil
-      self.preChatData = [:]
-      self.hiddenPreChatData = [:]
-    }
-    
-    Function("configure") { (config: [String: Any]) -> Bool in
-      guard let urlString = config["url"] as? String,
-            let orgId = config["orgId"] as? String,
-            let developerName = config["developerName"] as? String else {
-        return false
-      }
-      print("configure config:", config)
-      
-      let convId: UUID
-      if let conversationIdString = config["conversationId"] as? String,
-         let uuid = UUID(uuidString: conversationIdString) {
-        convId = uuid
-      } else {
-        convId = self.getOrCreateConversationId()
-      }
-      self.conversationId = convId
-        
-      self.uiConfiguration = UIConfiguration(
-        serviceAPI: URL(string: urlString)!,
-        organizationId: orgId,
-        developerName: developerName,
-        conversationId: convId
-      )
-        
-        print("configure UIConfiguration:", self.uiConfiguration)
-      
-      // Processar campos de pré-chat se fornecidos no configure
-      if let preChatFields = config["preChatFields"] as? [String: String] {
-        print("configure preChatFields: ", preChatFields)
-        self.preChatData = preChatFields
-      }
-      
-      if let hiddenFields = config["hiddenPreChatFields"] as? [String: String] {
-        print("configure hiddenFields: ", hiddenFields)
-        self.hiddenPreChatData = hiddenFields
-      }
-      
-      return true
-    }
-    
-    Function("setPreChatFields") { (fields: [String: String]) -> Bool in
-      self.preChatData = fields
-      return true
-    }
-    
-    Function("setHiddenPreChatFields") { (fields: [String: String]) -> Bool in
-      self.hiddenPreChatData = fields
-      return true
-    }
-    
-    AsyncFunction("openChat") { (promise: Promise) in
-      DispatchQueue.main.async {
-        guard let config = self.uiConfiguration else {
-          promise.reject("ERR_NOT_CONFIGURED", "SDK not configured. Call configure() first.")
-          return
-        }
-        
-        guard let rootViewController = self.getRootViewController() else {
-          promise.reject("ERR_NO_ROOT_VC", "Could not find root view controller.")
-          return
-        }
-        
-        // ============================================
-        // SOLUÇÃO SIMPLIFICADA:
-        // Se você tem APENAS hidden fields, configure-os
-        // Se você tem visible fields, deixe o UI SDK exibir o formulário
-        // Para pular o formulário: use APENAS hidden fields no Salesforce
-        // ============================================
-        
-        let coreClient = CoreFactory.create(withConfig: config)
-        
-        // Configurar HiddenPreChatDelegate se necessário
-        if !self.hiddenPreChatData.isEmpty {
-          let hiddenDelegate = HiddenPreChatDelegateImpl(hiddenData: self.hiddenPreChatData)
-          coreClient.preChatDelegate = hiddenDelegate
-          print("🔐 HiddenPreChatDelegate configurado com \(self.hiddenPreChatData.count) campos")
-        }
-        
-        // Iniciar o CoreClient
-        coreClient.start()
-        print("🚀 CoreClient iniciado")
-        
-        // Criar o chat view
-        let chatView: ModalInterfaceViewController
-        
-        // Se temos campos visíveis para pré-preencher
-        if !self.preChatData.isEmpty {
-          chatView = ModalInterfaceViewController(
-            config,
-            preChatFieldValueProvider: { [weak self] preChatFields in
-              guard let self = self else { return preChatFields }
-              return try await self.modifyPreChatFields(preChatFields)
-            }
+          print("DEBUG: ✅ [ExpoSalesForceMIAW] Configurando SDK com parâmetros: \(config)")
+          guard let urlString = config["url"] as? String,
+                let orgId = config["orgId"] as? String,
+                let developerName = config["developerName"] as? String else {
+                  return nil
+                }
+
+          
+          let convId = (config["conversationId"] as? String).flatMap(UUID.init) ?? self.getOrCreateConversationId()
+          self.currentConversationId = convId
+          self.userCanEditPreChatFields = config["userCanEditPreChatFields"] as? Bool ?? false
+          self.finalizeSessionOnClose = config["finalizeSessionOnClose"] as? Bool ?? false
+          
+          self.uiConfiguration = UIConfiguration(
+              serviceAPI: URL(string: urlString)!,
+              organizationId: orgId,
+              developerName: developerName,
+              conversationId: convId
           )
-          print("✅ PreChatFieldValueProvider configurado com \(self.preChatData.count) campos")
-        } else {
-          chatView = ModalInterfaceViewController(config)
-        }
-        
-        // Apresentar o chat
-        rootViewController.present(chatView, animated: true) {
-          print("✅ Chat interface apresentada")
-          promise.resolve(true)
-        }
+          
+          if let preChatFields = config["preChatFields"] as? [String: String] {
+              self.preChatData = preChatFields
+          }
+          
+          if let hiddenFields = config["hiddenPreChatFields"] as? [String: String] {
+              self.hiddenPreChatData = hiddenFields
+          }
+          
+          return convId.uuidString
       }
-    }
-    
-    AsyncFunction("closeChat") { (promise: Promise) in
-      DispatchQueue.main.async {
-        guard let rootViewController = self.getRootViewController() else {
-          promise.reject("ERR_NO_ROOT_VC", "Could not find root view controller.")
-          return
-        }
-        
-        rootViewController.dismiss(animated: true) {
-          promise.resolve(true)
-        }
-      }
-    }
-    
-    Function("getConversationId") { () -> String? in
-      return self.conversationId?.uuidString
-    }
-    
-    Function("setConversationId") { (newIdString: String) -> Bool in
-      guard let newId = UUID(uuidString: newIdString) else {
-        return false
-      }
-      self.conversationId = newId
       
-      if let config = self.uiConfiguration {
-        self.uiConfiguration = UIConfiguration(
-          serviceAPI: config.serviceAPI,
-          organizationId: config.organizationId,
-          developerName: config.developerName,
-          conversationId: newId
-        )
-        return true
-      }
-      return false
-    }
-    
-    Function("clearConversationId") { () -> String in
-      let newId = UUID()
-      self.conversationId = newId
-      UserDefaults.standard.set(newId.uuidString, forKey: "ExpoSalesforceMIAW_ConversationId")
       
-      if let config = self.uiConfiguration {
-        self.uiConfiguration = UIConfiguration(
-          serviceAPI: config.serviceAPI,
-          organizationId: config.organizationId,
-          developerName: config.developerName,
-          conversationId: newId
-        )
-      }
-      return newId.uuidString
-    }
-    
-    Function("registerPushToken") { (token: String) -> Bool in
-      // Implementação de registro de token se necessário
-      return true
-    }
-    
-    Events("onChatOpened", "onChatClosed", "onMessageReceived", "onError")
-  }
+      AsyncFunction("openChat") { (promise: Promise) in
+          DispatchQueue.main.async {
+              guard let config = self.uiConfiguration else {
+                  promise.reject("ERR_NOT_CONFIGURED", "SDK not configured.")
+                  return
+              }
+          
+              guard let rootViewController = self.getRootViewController() else {
+                  promise.reject("ERR_NO_ROOT_VC", "Could not find root view controller.")
+                  return
+              }
+              
+     
+              let coreClient = CoreFactory.create(withConfig: config)
+              self.coreClient = coreClient
+              
+              let adapter = SalesForceMIAWDelegateAdapter(hiddenData: self.hiddenPreChatData, module: self)
+              self.coreDelegateAdapter = adapter
+              
+              coreClient.preChatDelegate = adapter
+              coreClient.addDelegate(delegate: adapter)
+              
+              coreClient.start()
+              
+              coreClient.retrieveRemoteConfiguration(completion: { [weak self] remoteConfig, error in
+                  guard let self = self, let configRemote = remoteConfig else {
+                      if let error = error { print("❌ Erro Remote Config: \(error.localizedDescription)") }
+                      return
+                  }
+                  self.submitRemoteConfig(coreClient: coreClient, remoteConfig: configRemote)
+              })
 
-  // MARK: - Helper Methods
-
-  private func getOrCreateConversationId() -> UUID {
-    let key = "ExpoSalesforceMIAW_ConversationId"
-    if let existingIdString = UserDefaults.standard.string(forKey: key),
-       let existingUUID = UUID(uuidString: existingIdString) {
-      return existingUUID
-    }
-    let newUUID = UUID()
-    UserDefaults.standard.set(newUUID.uuidString, forKey: key)
-    return newUUID
-  }
-
-  private func getRootViewController() -> UIViewController? {
-    guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-          let window = windowScene.windows.first,
-          let rootViewController = window.rootViewController else {
-      return nil
-    }
-    
-    var topController = rootViewController
-    while let presentedViewController = topController.presentedViewController {
-      topController = presentedViewController
-    }
-    return topController
-  }
-  
-  // ============================================
-  // MODIFICADOR DE PRÉ-CHAT FIELDS (VISÍVEIS)
-  // ============================================
-  
-  /// Função que modifica os campos de pré-chat com os valores fornecidos
-  private func modifyPreChatFields(_ preChatFields: [PreChatField]) async throws -> [PreChatField] {
-    print("🔵 modifyPreChatFields chamado com \(preChatFields.count) campos")
-    
-    var modifiedFields = preChatFields
-    
-    for (index, field) in modifiedFields.enumerated() {
-      let fieldName = field.name
-      print("  → Campo: \(fieldName)")
-      
-      // Se temos um valor para este campo, popula e configura
-      if let value = preChatData[fieldName] {
-        modifiedFields[index].value = value
-        
-        // IMPORTANTE: Configurar se o campo é editável ou não
-        // true = usuário pode editar o valor preenchido
-        // false = campo fica bloqueado (read-only)
-        modifiedFields[index].isEditable = false
-        
-        print("    ✅ Preenchido com: \(value) | isEditable: false")
+              let chatView: ModalInterfaceViewController
+              if !self.preChatData.isEmpty {
+                  chatView = ModalInterfaceViewController(config, preChatFieldValueProvider: { [weak self] fields in
+                      guard let self = self else { return fields }
+                      return await self.modifyPreChatFields(preChatFields: fields)
+                  })
+              } else {
+                  chatView = ModalInterfaceViewController(config)
+              }
+              
+              rootViewController.present(chatView, animated: true) {
+                  promise.resolve(true)
+              }
+          }
       }
-    }
-    
-    return modifiedFields
   }
   
-  // ============================================
-  // DELEGATE PARA HIDDEN PRE-CHAT FIELDS
-  // ============================================
+    private func submitRemoteConfig(coreClient: CoreClient, remoteConfig: RemoteConfiguration) {
+        guard let conversationId = self.currentConversationId else { return }
+            
+            if let fields = remoteConfig.preChatConfiguration?.first?.preChatFields {
+                for preChatField in fields {
+                    
+                    if let value = self.preChatData[preChatField.name] ?? self.hiddenPreChatData[preChatField.name] {
+                        preChatField.value = value
+                    } else {
+                        print("⚠️ Campo \(preChatField.name) não encontrado no App (ficará null)")
+                    }
+                }
+            }
+
+            let conversationClient = coreClient.conversationClient(with: conversationId)
   
-  /// Delegate para campos OCULTOS (Hidden PreChat Fields)
-  /// Estes campos NÃO aparecem na interface, são enviados nos bastidores
-  private class HiddenPreChatDelegateImpl: HiddenPreChatDelegate {
-    private let hiddenData: [String: String]
-    
-    init(hiddenData: [String: String]) {
-      self.hiddenData = hiddenData
+            conversationClient.submit(remoteConfig: remoteConfig, createConversationOnSubmit: false)
     }
-    
-    func core(_ core: CoreClient!,
-              conversation: Conversation!,
-              didRequestPrechatValues hiddenPreChatFields: [HiddenPreChatField]!,
-              completionHandler: HiddenPreChatValueCompletion!) {
-      
-      print("🟣 didRequestPrechatValues (hidden) chamado")
-      
-      guard var updatedFields = hiddenPreChatFields else {
-        print("  ⚠️ Nenhum campo hidden recebido")
-        completionHandler([])
-        return
-      }
-      
-      // Preencher cada campo hidden com o valor correspondente
-      for (index, field) in updatedFields.enumerated() {
-        let fieldName = field.name
-        print("  → Campo hidden: \(fieldName)")
-        
-        if let value = hiddenData[fieldName] {
-          updatedFields[index].value = value
-          print("    ✅ Preenchido com: \(value)")
+
+    private func getRootViewController() -> UIViewController? {
+        let scenes = UIApplication.shared.connectedScenes
+        let windowScene = scenes.first as? UIWindowScene
+        var topController = windowScene?.windows.first(where: { $0.isKeyWindow })?.rootViewController
+        while let presented = topController?.presentedViewController { topController = presented }
+        return topController
+    }
+
+    private func modifyPreChatFields(preChatFields: [PreChatField]) async -> [PreChatField] {
+        let modifiedFields = preChatFields
+        for (index, field) in modifiedFields.enumerated() {
+            if let value = preChatData[field.name] {
+                modifiedFields[index].value = value
+                modifiedFields[index].isEditable = self.userCanEditPreChatFields
+            }
         }
-      }
-      
-      // Retornar os campos atualizados para o SDK
-      completionHandler(updatedFields)
+        return modifiedFields
     }
-  }
+
+    private func cleanSession() {
+        if let core = self.coreClient {
+            if let adapter = self.coreDelegateAdapter {
+                core.removeDelegate(delegate: adapter)
+            }
+            core.stop()
+        }
+        
+  
+        self.coreClient = nil
+        self.coreDelegateAdapter = nil
+        self.currentConversationId = nil
+    }
+
+    private func deleteConversationId() {
+        UserDefaults.standard.removeObject(forKey: self.dataKey)
+        self.currentConversationId = nil
+        print("Conversation ID cleaned")
+    }
+
+     private func getOrCreateConversationId() -> UUID {
+         if let id = UserDefaults.standard.string(forKey: self.dataKey), let uuid = UUID(uuidString: id) { return uuid }
+         let newId = UUID()
+//         self.saveConversationId(newId)
+         return newId
+     }
+    
+    private func saveConversationId() {
+        if self.currentConversationId != nil {
+            UserDefaults.standard.set(self.currentConversationId?.uuidString, forKey: self.dataKey)
+            print("Conversation ID saved!")
+        }
+    }
+    
+    @objc func saveConversationData() {
+        self.saveConversationId()
+    }
+    
+    @objc func resetConversationData() {
+        self.deleteConversationId()
+    }
+    
+    @objc func closeChatFunc() {
+        DispatchQueue.main.async {
+            print("DEBUG: [ExpoSalesForceMIAW] Iniciando fechamento forçado...")
+            
+            let rootViewController = self.getRootViewController()
+            if let core = self.coreClient, let convId = self.currentConversationId {
+                
+                core.closeConversation(withIdentifier: convId) { _ in }
+            }
+                
+            self.cleanSession()
+      
+            rootViewController?.dismiss(animated: true) {
+                print("DEBUG: ✅ [UI] Chat fechado e memória limpa.")
+                self.sendEvent("onChatClosed", ["reason": "session_terminated"])
+            }
+        }
+    }
 }

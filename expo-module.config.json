@@ -1,9 +1,9 @@
 {
-  "platforms": ["apple", "android", "web"],
-  "apple": {
+  "platforms": ["ios", "android", "web"],
+  "ios": {
     "modules": ["SalesForceMIAWModule"]
   },
   "android": {
-    "modules": ["expo.salesforcemiaw.ExpoSalesForceMIAW"]
+    "modules": ["expo.modules.salesforcemiaw.ExpoSalesForceMIAWModule"]
   }
 }
