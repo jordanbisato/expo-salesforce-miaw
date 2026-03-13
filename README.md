@@ -15,7 +15,7 @@ It allows you to easily add Salesforce chat functionality to your app, leveragin
 
 **Customization**: Support for hidden pre-chat fields.
 
-### Installation
+## Installation
 
 To install the module, run the following command in your React Native or Expo project:
 
@@ -23,7 +23,7 @@ To install the module, run the following command in your React Native or Expo pr
 yarn add @jordanbisato/expo-salesforce-miaw
 ```
 
-### 1. Configuration
+## 1. Configuration
 
 Add Plugin to `app.json`
 Add the plugin to your app.json or app.config.js configuration. The plugin name is the same as the package name:
@@ -54,7 +54,7 @@ After it, add this line to your `app.json` file:
 }
 ```
 
-### 2. App Rebuild
+## 2. App Rebuild
 
 After installation and configuration, you need to rebuild your application for the native changes to be applied:
 
@@ -64,9 +64,9 @@ npx expo run:ios
 npx expo run:android
 ```
 
-### 3. API List
+## 3. API List
 
-## configure(config)
+### configure(config)
 
 Configures the SDK manually. Returns a `Promise<boolean>`.
 
@@ -99,7 +99,7 @@ if (conversationID) {
 }
 ```
 
-## openChat()
+### openChat()
 
 Opens the chat interface. Returns a `Promise<boolean>`.
 
@@ -109,7 +109,7 @@ import SalesForceMIAW from "@jordanbisato/expo-salesforce-miaw";
 SalesForceMIAW.openChat();
 ```
 
-## closeChat()
+### closeChat()
 
 Closes the chat interface. Returns a Promise<boolean>.
 
@@ -119,9 +119,9 @@ import SalesForceMIAW from "@jordanbisato/expo-salesforce-miaw";
 SalesForceMIAW.closeChat();
 ```
 
-### 4. Error fix
+## 4. Error fix
 
-## Kotlin version
+### Kotlin version
 
 ```
 Module was compiled with an incompatible version of Kotlin. The binary version of its metadata is 2.2.0, expected version is 2.0.0.
@@ -129,7 +129,7 @@ Module was compiled with an incompatible version of Kotlin. The binary version o
 
 See the `1. Configuration` EXCLUSIVE FOR EXPO SDK 53 part.
 
-## META-INF
+### META-INF
 
 ```
 3 files found with path 'META-INF/versions/9/OSGI-INF/MANIFEST.MF' from inputs
@@ -145,7 +145,11 @@ After it, add this line to your `app.json` file:
     "plugins": "./plugins/salesforce-miaw-METAINF.js"
   }
 }
-
-Licença (License)
-MIT
 ```
+
+## 5. Acknowledgments
+
+A big THANK YOU to [Rodrigo Souza](https://github.com/rodrigosouza239) for your great help on this project. 
+Without your efforts, this project might not exist.
+
+
