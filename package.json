@@ -1,5 +1,5 @@
 {
-  "name": "expo-salesforce-miaw",
+  "name": "@jordanbisato/expo-salesforce-miaw",
   "version": "1.0.0",
   "description": "Module to integrate SalesForce MIAW chat and React Native",
   "main": "build/index.js",
