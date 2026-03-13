@@ -74,6 +74,6 @@ dependencies {
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
   
   // AndroidX
-  implementation "com.salesforce.service:messaging-inapp-ui:1.10.3"
+  implementation "com.salesforce.service:messaging-inapp-ui:1.10.2"
   implementation 'androidx.room:room-ktx:2.8.4'
 }
