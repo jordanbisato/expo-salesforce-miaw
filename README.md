@@ -15,7 +15,7 @@ It allows you to easily add Salesforce chat functionality to your app, leveragin
 
 **Customization**: Support for hidden pre-chat fields.
 
-##Installation
+### Installation
 
 To install the module, run the following command in your React Native or Expo project:
 
@@ -23,7 +23,7 @@ To install the module, run the following command in your React Native or Expo pr
 yarn add @jordanbisato/expo-salesforce-miaw
 ```
 
-##Configuration
+### 1. Configuration
 
 Add Plugin to `app.json`
 Add the plugin to your app.json or app.config.js configuration. The plugin name is the same as the package name:
@@ -40,7 +40,7 @@ The plugin will automatically configure the necessary permissions in `Info.plist
 
 ### EXCLUSIVE FOR EXPO SDK 53:
 
-If you are using Expo SDK 53, you need to download the `/plugins/expo-salesforce-miaw-plugin.js` to your `/plugins` folder on project root folder.
+If you are using Expo SDK 53, you need to download the `/plugins/salesforce-miaw-sdk53.js` to your `/plugins` folder on project root folder.
 
 You need it because Salesforce chat uses Kotlin Android Gradle Plugin version 2.2.10 or above, but SDK 53 uses 1.9.x.
 
@@ -49,7 +49,7 @@ After it, add this line to your `app.json` file:
 ```json
 {
   "expo": {
-    "plugins": "./plugins/expo-salesforce-miaw-plugin.js"
+    "plugins": "./plugins/salesforce-miaw-sdk53.js"
   }
 }
 ```
@@ -64,9 +64,9 @@ npx expo run:ios
 npx expo run:android
 ```
 
-## API
+### 3. API List
 
-### configure(config)
+## configure(config)
 
 Configures the SDK manually. Returns a `Promise<boolean>`.
 
@@ -99,7 +99,7 @@ if (conversationID) {
 }
 ```
 
-### openChat()
+## openChat()
 
 Opens the chat interface. Returns a `Promise<boolean>`.
 
@@ -109,7 +109,7 @@ import SalesForceMIAW from "@jordanbisato/expo-salesforce-miaw";
 SalesForceMIAW.openChat();
 ```
 
-### closeChat()
+## closeChat()
 
 Closes the chat interface. Returns a Promise<boolean>.
 
@@ -119,5 +119,33 @@ import SalesForceMIAW from "@jordanbisato/expo-salesforce-miaw";
 SalesForceMIAW.closeChat();
 ```
 
+### 4. Error fix
+
+## Kotlin version
+
+```
+Module was compiled with an incompatible version of Kotlin. The binary version of its metadata is 2.2.0, expected version is 2.0.0.
+```
+
+See the `1. Configuration` EXCLUSIVE FOR EXPO SDK 53 part.
+
+## META-INF
+
+```
+3 files found with path 'META-INF/versions/9/OSGI-INF/MANIFEST.MF' from inputs
+```
+
+You need to download the `/plugins/salesforce-miaw-METAINF.js` to your `/plugins` folder on project root folder.
+
+After it, add this line to your `app.json` file:
+
+```json
+{
+  "expo": {
+    "plugins": "./plugins/salesforce-miaw-METAINF.js"
+  }
+}
+
 Licença (License)
 MIT
+```
