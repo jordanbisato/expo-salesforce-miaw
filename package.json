@@ -1,6 +1,6 @@
 {
   "name": "@jordanbisato/expo-salesforce-miaw",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Module to integrate SalesForce MIAW chat and React Native",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -37,8 +37,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.0.10",
-    "expo-module-scripts": "^5.0.8",
     "expo": "^53.0.25",
+    "expo-module-scripts": "^5.0.8",
     "react-native": "0.79.6"
   }
 }
