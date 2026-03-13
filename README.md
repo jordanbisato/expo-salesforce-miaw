@@ -38,15 +38,23 @@ Add the plugin to your app.json or app.config.js configuration. The plugin name 
 
 The plugin will automatically configure the necessary permissions in `Info.plist` (iOS) and `build.gradle` settings (Android).
 
-### 2. Add Salesforce Config File
+### EXCLUSIVE FOR EXPO SDK 53:
 
-Download the `config.json` file from your Salesforce admin dashboard and add it to your project.
+If you are using Expo SDK 53, you need to download the `/plugins/expo-salesforce-miaw-plugin.js` to your `/plugins` folder on project root folder.
 
-**For iOS**: Add the file to your project in Xcode.
+You need it because Salesforce chat uses Kotlin Android Gradle Plugin version 2.2.10 or above, but SDK 53 uses 1.9.x.
 
-**For Android**: Place the file in the `android/app/src/main/assets` directory.
+After it, add this line to your `app.json` file:
 
-### 3. App Rebuild
+```json
+{
+  "expo": {
+    "plugins": "./plugins/expo-salesforce-miaw-plugin.js"
+  }
+}
+```
+
+### 2. App Rebuild
 
 After installation and configuration, you need to rebuild your application for the native changes to be applied:
 
@@ -63,7 +71,7 @@ npx expo run:android
 Configures the SDK manually. Returns a `Promise<boolean>`.
 
 ```javascript
-import SalesForceMIAW from "@/modules/expo-salesforce-miaw-local";
+import SalesForceMIAW from "@jordanbisato/expo-salesforce-miaw";
 
 const config = {
   url: "YOUR_SALESFORCE_URL",
@@ -96,7 +104,7 @@ if (conversationID) {
 Opens the chat interface. Returns a `Promise<boolean>`.
 
 ```javascript
-import SalesForceMIAW from "@/modules/expo-salesforce-miaw-local";
+import SalesForceMIAW from "@jordanbisato/expo-salesforce-miaw";
 
 SalesForceMIAW.openChat();
 ```
@@ -106,7 +114,7 @@ SalesForceMIAW.openChat();
 Closes the chat interface. Returns a Promise<boolean>.
 
 ```javascript
-import SalesForceMIAW from "@/modules/expo-salesforce-miaw-local";
+import SalesForceMIAW from "@jordanbisato/expo-salesforce-miaw";
 
 SalesForceMIAW.closeChat();
 ```
