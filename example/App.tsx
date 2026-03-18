@@ -11,7 +11,8 @@ export default function HomeScreen() {
       orgId: "YOUR_ORG_ID",
       developerName: "YOUR_DEPLOYMENT_NAME",
       userCanEditPreChatFields: false,
-      conversationId: (Platform.OS === "android" && idChatSF) || undefined,
+      conversationId:
+        Platform.OS === "android" && idChatSF ? idChatSF : undefined,
       preChatFields: {
         _firstName: "TEST",
         _lastName: "MIAW APP",
