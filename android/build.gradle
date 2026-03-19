@@ -2,7 +2,7 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 group = 'expo.modules.salesforcemiaw'
-version = '1.0.0'
+version = '1.0.3'
 
 def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
 if (expoModulesCorePlugin.exists()) {
@@ -27,12 +27,20 @@ android {
   namespace "expo.modules.salesforcemiaw"
   
   compileSdkVersion safeExtGet("compileSdkVersion", 36)
+
+  configurations.all {
+    resolutionStrategy {
+      force 'com.squareup.okhttp3:okhttp:5.2.1'
+      force 'com.squareup.okhttp3:logging-interceptor:5.2.1'
+      force 'com.squareup.okhttp3:okhttp-urlconnection:5.2.1'
+    }
+  }
   
   defaultConfig {
     minSdkVersion safeExtGet("minSdkVersion", 24)
     targetSdkVersion safeExtGet("targetSdkVersion", 36)
     versionCode 1
-    versionName "1.0.0"
+    versionName "1.0.3"
   }
 
   buildFeatures {
@@ -75,4 +83,8 @@ dependencies {
   
   // AndroidX
   implementation "com.salesforce.service:messaging-inapp-ui:1.10.2"
+
+  implementation 'com.squareup.okhttp3:logging-interceptor:5.2.1'
+  implementation 'com.squareup.okhttp3:okhttp:5.2.1'
+  implementation 'com.squareup.okhttp3:okhttp-urlconnection:5.2.1'
 }
