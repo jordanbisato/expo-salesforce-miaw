@@ -134,35 +134,39 @@ class ExpoSalesForceMIAWModule : Module() {
 
     AsyncFunction("openChat") { promise: Promise ->
       whenChatReady(promise) { client, config ->
-        val activity = appContext.currentActivity ?: return@whenChatReady promise.reject(
-          "ERR_NO_ACTIVITY",
-          "Activity não disponível",
-          null
-        )
-        val conversationId = currentConversationId ?: UUID.randomUUID()
-        val conversationClient = client.conversationClient(conversationId)
+        try {
+          val activity = appContext.currentActivity ?: return@whenChatReady promise.reject(
+            "ERR_NO_ACTIVITY",
+            "Activity não disponível",
+            null
+          )
+          val conversationId = currentConversationId ?: UUID.randomUUID()
+          val conversationClient = client.conversationClient(conversationId)
 
-        moduleScope.launch {
-          val result = client.retrieveRemoteConfiguration()
-          if (result is Result.Success) {
-            val remoteConfig = result.data
-            remoteConfig.forms.firstOrNull()?.formFields?.forEach { field ->
-              preChatFieldsMap[field.name]?.let { field.userInput = it }
-            }
-            conversationClient.submitRemoteConfiguration(remoteConfig)
+          moduleScope.launch {
+            val result = client.retrieveRemoteConfiguration()
+            if (result is Result.Success) {
+              val remoteConfig = result.data
+              remoteConfig.forms.firstOrNull()?.formFields?.forEach { field ->
+                preChatFieldsMap[field.name]?.let { field.userInput = it }
+              }
+              conversationClient.submitRemoteConfiguration(remoteConfig)
 
-            withContext(Dispatchers.Main) {
-              val uiConfig = UIConfiguration(
-                config, conversationId,
-                transcriptConfiguration = TranscriptConfiguration(allowTranscriptDownload = true),
-                conversationOptionsConfiguration = ConversationOptionsConfiguration(allowEndChat = true),
-              )
-              val uiClient = UIClient.Factory.create(uiConfig)
-              uiClient.openConversationActivity(activity)
-              sendEvent("onChatOpened", mapOf("conversationId" to conversationId.toString()))
-              promise.resolve(true)
+              withContext(Dispatchers.Main) {
+                val uiConfig = UIConfiguration(
+                  config, conversationId,
+                  transcriptConfiguration = TranscriptConfiguration(allowTranscriptDownload = true),
+                  conversationOptionsConfiguration = ConversationOptionsConfiguration(allowEndChat = true),
+                )
+                val uiClient = UIClient.Factory.create(uiConfig)
+                uiClient.openConversationActivity(activity)
+                sendEvent("onChatOpened", mapOf("conversationId" to conversationId.toString()))
+                promise.resolve(true)
+              }
             }
           }
+        } catch (e: Exception) {
+          promise.resolve(false)
         }
       }
     }
